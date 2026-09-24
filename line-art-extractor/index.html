@@ -1,1 +1,667 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Line Art Extractor - Transparent PNG Generator</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* Barras de rolagem personalizadas */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #090d16;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #1e293b;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #334155;
+    }
 
+    /* Padrão 1: Faixas de teste amarelas diagonais (suaves e sem interferência) */
+    .stripes {
+      background-color: #0b0f19;
+      background-image: repeating-linear-gradient(
+        45deg,
+        rgba(245, 158, 11, 0.09),
+        rgba(245, 158, 11, 0.09) 12px,
+        transparent 12px,
+        transparent 24px
+      );
+    }
+
+    /* Padrão 2: Quadriculado escuro de transparência */
+    .checker {
+      background-color: #0b0f19;
+      background-image:
+        linear-gradient(45deg, #1e293b 25%, transparent 25%),
+        linear-gradient(-45deg, #1e293b 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #1e293b 75%),
+        linear-gradient(-45deg, transparent 75%, #1e293b 75%);
+      background-size: 20px 20px;
+      background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+    }
+
+    /* Padrão 3: Branco plano limpo */
+    .white-bg {
+      background-color: #ffffff !important;
+      background-image: none !important;
+    }
+
+    /* Efeito de arraste sobre a área de upload */
+    .dropzone.dragover {
+      border-color: #f59e0b !important;
+      background-color: rgba(245, 158, 11, 0.08) !important;
+    }
+
+    /* Botões de pré-definição */
+    .chip-btn {
+      background-color: #1e293b;
+      border: 1px solid #334155;
+      color: #cbd5e1;
+      border-radius: 9999px;
+      padding: 4px 12px;
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .chip-btn:hover {
+      border-color: #f59e0b;
+      color: #ffffff;
+      background-color: #283347;
+    }
+
+    /* Botão ativo no seletor de fundo */
+    .seg-btn.active {
+      background-color: #f59e0b !important;
+      color: #0f172a !important;
+      font-weight: 700 !important;
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col font-sans select-none overflow-x-hidden">
+
+  <!-- Header / Barra Superior -->
+  <header class="h-16 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-6 z-20 flex-shrink-0">
+    <div class="flex items-center gap-3">
+      <!-- Ícone do Aplicativo -->
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-600 via-amber-500 to-yellow-400 flex items-center justify-center shadow-lg shadow-amber-500/20 flex-shrink-0">
+        <svg class="w-5 h-5 text-slate-950" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 19l7-7 3 3-7 7-3-3z"></path>
+          <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path>
+          <path d="M2 2l7.586 7.586"></path>
+          <circle cx="11" cy="11" r="2"></circle>
+        </svg>
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <h1 class="text-sm font-bold tracking-wide uppercase text-white">Line Art Extractor</h1>
+          <span class="text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">v2.0</span>
+        </div>
+        <!-- Descrição com aviso embutido e sutil -->
+        <div class="flex items-center gap-2 flex-wrap mt-0.5">
+          <p class="text-xs text-slate-400">Turn your sketches on paper to ready to work digital sketches!</p>
+          <span class="text-[10.5px] font-medium text-rose-400/90 bg-rose-950/40 border border-rose-900/50 px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+            <svg class="w-3 h-3 text-rose-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+            </svg>
+            Don't use this for tracing!
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Ações do Cabeçalho -->
+    <div class="flex items-center gap-3">
+      <button id="resetBtn" class="text-xs font-semibold px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg border border-slate-700 transition flex items-center gap-1.5">
+        <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+        </svg>
+        Reset
+      </button>
+
+      <button id="downloadBtn" disabled class="cursor-not-allowed opacity-40 text-xs font-semibold px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg shadow-sm shadow-emerald-600/30 transition flex items-center gap-2">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+        </svg>
+        Download PNG
+      </button>
+    </div>
+  </header>
+
+  <!-- Painel de Trabalho -->
+  <div class="flex-1 grid grid-cols-1 lg:grid-cols-[330px_1fr] overflow-hidden min-h-0">
+    
+    <!-- Barra Lateral de Controles -->
+    <aside class="rail bg-slate-900 border-r border-slate-800 p-5 overflow-y-auto space-y-6">
+
+      <!-- Seção 1: Upload -->
+      <section class="space-y-2">
+        <h2 class="text-xs font-semibold text-slate-400 uppercase tracking-wider font-mono">1. Source Image</h2>
+        <div id="dropzone" class="dropzone border-2 border-dashed border-slate-700/80 hover:border-amber-500/80 bg-slate-950/40 rounded-xl p-5 text-center cursor-pointer transition group">
+          <input type="file" id="fileInput" accept="image/*" class="hidden">
+          <div class="w-10 h-10 mx-auto mb-2 rounded-lg bg-slate-800 group-hover:bg-amber-500/10 flex items-center justify-center text-slate-400 group-hover:text-amber-400 transition">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
+            </svg>
+          </div>
+          <p class="text-xs text-slate-300 font-medium">Drop scan or photo here</p>
+          <p class="text-[11px] text-slate-500 mt-0.5">or <span class="text-amber-400 underline decoration-amber-400/40">browse from computer</span></p>
+        </div>
+        <p id="fileInfo" class="text-[11px] font-mono text-slate-400 px-1 break-all"></p>
+      </section>
+
+      <!-- Seção 2: Presets -->
+      <section class="space-y-2.5">
+        <h2 class="text-xs font-semibold text-slate-400 uppercase tracking-wider font-mono">2. Quick Presets</h2>
+        <div class="flex flex-wrap gap-1.5" id="builtinPresets"></div>
+      </section>
+
+      <!-- Seção 3: Níveis e Histograma -->
+      <section class="space-y-3.5">
+        <div class="flex items-center justify-between">
+          <h2 class="text-xs font-semibold text-slate-400 uppercase tracking-wider font-mono">3. Threshold Levels</h2>
+          <span class="text-[10px] text-slate-500">Interactive</span>
+        </div>
+
+        <div class="bg-slate-950/80 border border-slate-800 rounded-xl p-2.5 space-y-2">
+          <canvas id="histogram" width="512" height="120" class="w-full h-auto rounded-lg cursor-ew-resize bg-slate-900/60"></canvas>
+          <p class="text-[10.5px] text-slate-500 text-center">Drag the marker pins on the graph or adjust sliders.</p>
+        </div>
+
+        <div class="space-y-3 pt-1">
+          <!-- Dark Point -->
+          <div>
+            <div class="flex justify-between items-center text-xs mb-1.5">
+              <span class="text-slate-300 font-medium flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full bg-teal-400"></span> Stroke Floor
+              </span>
+              <span class="font-mono text-teal-400 font-semibold" id="darkVal">0</span>
+            </div>
+            <input type="range" id="darkPoint" min="0" max="255" value="0" class="w-full accent-teal-400 bg-slate-800 h-1.5 rounded-lg cursor-pointer">
+          </div>
+
+          <!-- Light Point -->
+          <div>
+            <div class="flex justify-between items-center text-xs mb-1.5">
+              <span class="text-slate-300 font-medium flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full bg-amber-400"></span> Background Ceiling
+              </span>
+              <span class="font-mono text-amber-400 font-semibold" id="lightVal">200</span>
+            </div>
+            <input type="range" id="lightPoint" min="0" max="255" value="200" class="w-full accent-amber-400 bg-slate-800 h-1.5 rounded-lg cursor-pointer">
+          </div>
+
+          <!-- Gamma -->
+          <div>
+            <div class="flex justify-between items-center text-xs mb-1.5">
+              <span class="text-slate-300 font-medium">Gamma Curve</span>
+              <span class="font-mono text-slate-200 font-semibold" id="gammaVal">1.00</span>
+            </div>
+            <input type="range" id="gamma" min="0.2" max="3" step="0.05" value="1" class="w-full accent-indigo-400 bg-slate-800 h-1.5 rounded-lg cursor-pointer">
+          </div>
+        </div>
+      </section>
+
+      <!-- Seção 4: Cor e Configurações -->
+      <section class="space-y-3">
+        <h2 class="text-xs font-semibold text-slate-400 uppercase tracking-wider font-mono">4. Ink & Styling</h2>
+        
+        <div class="grid grid-cols-2 gap-2 text-xs">
+          <label class="flex items-center gap-2 p-2.5 rounded-lg border border-slate-800 bg-slate-950/40 cursor-pointer hover:border-slate-700 transition">
+            <input type="radio" name="colorMode" value="original" checked class="accent-amber-500">
+            <span class="text-slate-300">Original Ink</span>
+          </label>
+          <label class="flex items-center gap-2 p-2.5 rounded-lg border border-slate-800 bg-slate-950/40 cursor-pointer hover:border-slate-700 transition">
+            <input type="radio" name="colorMode" value="solid" class="accent-amber-500">
+            <span class="text-slate-300">Solid Ink</span>
+          </label>
+        </div>
+
+        <div>
+          <label class="block text-[11px] text-slate-400 mb-1 font-mono uppercase">Custom Ink Color</label>
+          <input type="color" id="lineColor" value="#000000" disabled class="w-full h-9 rounded-lg border border-slate-700 bg-slate-800 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed p-0.5">
+        </div>
+
+        <!-- Opções Avançadas -->
+        <details class="advanced group pt-2 border-t border-slate-800/80">
+          <summary class="flex items-center justify-between text-xs font-medium text-slate-400 hover:text-slate-200 cursor-pointer list-none py-1">
+            <span>Advanced Processing</span>
+            <svg class="w-4 h-4 text-slate-500 group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+            </svg>
+          </summary>
+          <div class="pt-3 space-y-2.5">
+            <label class="flex items-center gap-2.5 text-xs text-slate-300 cursor-pointer">
+              <input type="checkbox" id="despeckle" class="rounded accent-amber-500 w-4 h-4 bg-slate-800 border-slate-700">
+              <span>Remove isolated noise pixels (Despeckle)</span>
+            </label>
+            <label class="flex items-center gap-2.5 text-xs text-slate-300 cursor-pointer">
+              <input type="checkbox" id="invert" class="rounded accent-amber-500 w-4 h-4 bg-slate-800 border-slate-700">
+              <span>Invert (light line art for dark mode)</span>
+            </label>
+          </div>
+        </details>
+      </section>
+
+    </aside>
+
+    <!-- Visualização Dupla (Stage) -->
+    <main class="stage flex-1 p-6 overflow-y-auto bg-slate-950 flex flex-col gap-6">
+      <div class="canvas-pair grid grid-cols-1 xl:grid-cols-2 gap-6 flex-1">
+        
+        <!-- Painel do Original -->
+        <div class="canvas-card bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400 font-mono">Original Scan</h3>
+            <span class="text-[10px] text-slate-500 font-mono">Unfiltered</span>
+          </div>
+          <!-- Borda fina e nítida sem sombras difusas -->
+          <div class="canvas-frame flex-1 min-h-[300px] bg-slate-950 border border-slate-800/80 rounded-xl overflow-hidden flex items-center justify-center p-3">
+            <canvas id="originalCanvas" class="max-w-full max-h-[65vh] object-contain ring-1 ring-slate-700/60"></canvas>
+          </div>
+        </div>
+
+        <!-- Painel do Resultado (Com Fundo de Teste em Faixas Amarelas) -->
+        <div class="canvas-card bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col">
+          <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <div class="flex items-center gap-2">
+              <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400 font-mono">Isolated Line Art</h3>
+              <span class="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">Alpha Channel Active</span>
+            </div>
+            
+            <!-- Seletor de Fundo de Pré-visualização -->
+            <div class="preview-bg-toggle inline-flex bg-slate-950 p-1 rounded-lg border border-slate-800" id="previewBgToggle">
+              <button type="button" class="seg-btn active px-2.5 py-1 text-[11px] font-medium rounded-md text-slate-400 hover:text-white transition" data-bg="stripes">Test Stripes</button>
+              <button type="button" class="seg-btn px-2.5 py-1 text-[11px] font-medium rounded-md text-slate-400 hover:text-white transition" data-bg="checker">Checkerboard</button>
+              <button type="button" class="seg-btn px-2.5 py-1 text-[11px] font-medium rounded-md text-slate-400 hover:text-white transition" data-bg="white">White</button>
+            </div>
+          </div>
+
+          <!-- O quadro agora utiliza .stripes por padrão e o canvas tem contorno nítido (ring-1) sem sombra difusa -->
+          <div class="canvas-frame stripes flex-1 min-h-[300px] border border-slate-800/80 rounded-xl overflow-hidden flex items-center justify-center p-3 relative" id="resultFrame">
+            <canvas id="resultCanvas" class="max-w-full max-h-[65vh] object-contain ring-1 ring-amber-500/30"></canvas>
+          </div>
+          <p class="text-[11px] text-slate-500 mt-2 text-right">Exported PNG is always transparent.</p>
+        </div>
+
+      </div>
+
+      <!-- Estado Vazio -->
+      <div id="emptyHint" class="py-12 flex flex-col items-center justify-center text-center">
+        <div class="w-16 h-16 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-600 mb-3 shadow-xl">
+          <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+          </svg>
+        </div>
+        <h4 class="text-sm font-semibold text-slate-400">No Image Loaded</h4>
+        <p class="text-xs text-slate-600 max-w-sm mt-1">Upload a drawing or photo to inspect and adjust line thresholds in real-time.</p>
+      </div>
+    </main>
+
+  </div>
+
+  <script>
+  (function(){
+    "use strict";
+
+    // ---------- Referências do DOM ----------
+    const dropzone = document.getElementById('dropzone');
+    const fileInput = document.getElementById('fileInput');
+    const fileInfo = document.getElementById('fileInfo');
+    const originalCanvas = document.getElementById('originalCanvas');
+    const resultCanvas = document.getElementById('resultCanvas');
+    const resultFrame = document.getElementById('resultFrame');
+    const previewBgToggle = document.getElementById('previewBgToggle');
+    const emptyHint = document.getElementById('emptyHint');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const resetBtn = document.getElementById('resetBtn');
+
+    const histCanvas = document.getElementById('histogram');
+    const darkPointInput = document.getElementById('darkPoint');
+    const lightPointInput = document.getElementById('lightPoint');
+    const gammaInput = document.getElementById('gamma');
+    const darkVal = document.getElementById('darkVal');
+    const lightVal = document.getElementById('lightVal');
+    const gammaVal = document.getElementById('gammaVal');
+
+    const lineColorInput = document.getElementById('lineColor');
+    const despeckleInput = document.getElementById('despeckle');
+    const invertInput = document.getElementById('invert');
+
+    const builtinPresetsEl = document.getElementById('builtinPresets');
+
+    const MAX_SIDE = 3000; // Limite de desempenho para imagens gigantes
+
+    // ---------- Estado da Aplicação ----------
+    const state = {
+      width: 0, height: 0,
+      srcImageData: null,
+      hist: null, histMax: 0,
+      darkPoint: 0, lightPoint: 200, gamma: 1,
+      colorMode: 'original', lineColor: '#000000',
+      despeckle: false, invert: false,
+      fileBaseName: 'lineart'
+    };
+
+    const BUILTIN_PRESETS = [
+      { name: 'Default', dark: 0, light: 200, gamma: 1, colorMode: 'original', lineColor: '#000000', despeckle: false, invert: false },
+      { name: 'Ink (bold)', dark: 0, light: 140, gamma: 1.4, colorMode: 'solid', lineColor: '#000000', despeckle: true, invert: false },
+      { name: 'Pencil sketch', dark: 20, light: 248, gamma: 0.55, colorMode: 'original', lineColor: '#000000', despeckle: false, invert: false }
+    ];
+
+    // ---------- Carregamento da Imagem ----------
+    function baseName(filename){
+      return filename.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9_-]+/g, '_') || 'lineart';
+    }
+
+    function loadImage(file){
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          let w = img.naturalWidth, h = img.naturalHeight;
+          let resized = false;
+          if (Math.max(w, h) > MAX_SIDE) {
+            const scale = MAX_SIDE / Math.max(w, h);
+            w = Math.round(w * scale); h = Math.round(h * scale);
+            resized = true;
+          }
+          state.width = w; state.height = h;
+          originalCanvas.width = w; originalCanvas.height = h;
+          resultCanvas.width = w; resultCanvas.height = h;
+
+          const octx = originalCanvas.getContext('2d');
+          octx.clearRect(0, 0, w, h);
+          octx.drawImage(img, 0, 0, w, h);
+          state.srcImageData = octx.getImageData(0, 0, w, h);
+          state.fileBaseName = baseName(file.name);
+
+          computeHistogram();
+          drawHistogram();
+          process();
+
+          fileInfo.textContent = `${file.name} — ${w}×${h}px${resized ? ' (resized)' : ''}`;
+          downloadBtn.disabled = false;
+          downloadBtn.classList.remove('cursor-not-allowed', 'opacity-40');
+          emptyHint.style.display = 'none';
+        };
+        img.onerror = () => { fileInfo.textContent = "Couldn't open that file."; };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    dropzone.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', (e) => {
+      const f = e.target.files[0];
+      if (f) loadImage(f);
+    });
+    ['dragenter', 'dragover'].forEach(evt => dropzone.addEventListener(evt, (e) => {
+      e.preventDefault(); dropzone.classList.add('dragover');
+    }));
+    ['dragleave', 'drop'].forEach(evt => dropzone.addEventListener(evt, (e) => {
+      e.preventDefault(); dropzone.classList.remove('dragover');
+    }));
+    dropzone.addEventListener('drop', (e) => {
+      const f = e.dataTransfer.files && e.dataTransfer.files[0];
+      if (f && f.type.startsWith('image/')) loadImage(f);
+    });
+
+    // ---------- Histograma ----------
+    function computeHistogram(){
+      const data = state.srcImageData.data;
+      const hist = new Uint32Array(256);
+      for (let i = 0; i < data.length; i += 4) {
+        const lum = Math.round(0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]);
+        hist[lum]++;
+      }
+      state.hist = hist;
+      let max = 0;
+      for (let i = 0; i < 256; i++) if (hist[i] > max) max = hist[i];
+      state.histMax = max;
+    }
+
+    function drawMarker(ctx, value, color, H){
+      const x = (value / 255) * ctx.canvas.width;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H - 22); ctx.stroke();
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(x - 6, H);
+      ctx.lineTo(x + 6, H);
+      ctx.lineTo(x, H - 12);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    function drawHistogram(){
+      const ctx = histCanvas.getContext('2d');
+      const W = histCanvas.width, H = histCanvas.height;
+      ctx.clearRect(0, 0, W, H);
+      if (state.hist) {
+        const barW = W / 256;
+        const logMax = Math.log((state.histMax || 1) + 1);
+        ctx.fillStyle = 'rgba(203, 213, 225, 0.45)';
+        for (let i = 0; i < 256; i++) {
+          const v = logMax ? Math.log(state.hist[i] + 1) / logMax : 0;
+          const barH = v * (H - 26);
+          ctx.fillRect(i * barW, H - 22 - barH, Math.max(1, barW), barH);
+        }
+      }
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+      ctx.beginPath(); ctx.moveTo(0, H - 22); ctx.lineTo(W, H - 22); ctx.stroke();
+
+      drawMarker(ctx, state.darkPoint, '#2dd4bf', H);  // Teal-400
+      drawMarker(ctx, state.lightPoint, '#fbbf24', H); // Amber-400
+    }
+
+    let dragging = null;
+    function pointerToValue(e){
+      const rect = histCanvas.getBoundingClientRect();
+      let x = (e.clientX - rect.left) / rect.width * 255;
+      return Math.min(255, Math.max(0, Math.round(x)));
+    }
+    histCanvas.addEventListener('pointerdown', (e) => {
+      const x = pointerToValue(e);
+      dragging = Math.abs(x - state.darkPoint) <= Math.abs(x - state.lightPoint) ? 'dark' : 'light';
+      histCanvas.setPointerCapture(e.pointerId);
+      updateFromPointer(e);
+    });
+    histCanvas.addEventListener('pointermove', (e) => { if (dragging) updateFromPointer(e); });
+    histCanvas.addEventListener('pointerup', () => { dragging = null; });
+    function updateFromPointer(e){
+      const x = pointerToValue(e);
+      if (dragging === 'dark') {
+        state.darkPoint = Math.min(x, state.lightPoint - 1);
+        darkPointInput.value = state.darkPoint; darkVal.textContent = state.darkPoint;
+      } else {
+        state.lightPoint = Math.max(x, state.darkPoint + 1);
+        lightPointInput.value = state.lightPoint; lightVal.textContent = state.lightPoint;
+      }
+      drawHistogram();
+      scheduleProcess();
+    }
+
+    // ---------- Controles ----------
+    darkPointInput.addEventListener('input', (e) => {
+      let v = parseInt(e.target.value, 10);
+      if (v >= state.lightPoint) v = state.lightPoint - 1;
+      state.darkPoint = v; darkVal.textContent = v;
+      drawHistogram(); scheduleProcess();
+    });
+    lightPointInput.addEventListener('input', (e) => {
+      let v = parseInt(e.target.value, 10);
+      if (v <= state.darkPoint) v = state.darkPoint + 1;
+      state.lightPoint = v; lightVal.textContent = v;
+      drawHistogram(); scheduleProcess();
+    });
+    gammaInput.addEventListener('input', (e) => {
+      state.gamma = parseFloat(e.target.value);
+      gammaVal.textContent = state.gamma.toFixed(2);
+      scheduleProcess();
+    });
+    document.querySelectorAll('input[name=colorMode]').forEach(r => {
+      r.addEventListener('change', (e) => {
+        state.colorMode = e.target.value;
+        lineColorInput.disabled = state.colorMode !== 'solid';
+        scheduleProcess();
+      });
+    });
+    lineColorInput.addEventListener('input', (e) => {
+      state.lineColor = e.target.value;
+      scheduleProcess();
+    });
+    despeckleInput.addEventListener('change', (e) => { state.despeckle = e.target.checked; scheduleProcess(); });
+    invertInput.addEventListener('change', (e) => { state.invert = e.target.checked; scheduleProcess(); });
+
+    // Alternador de Fundo: Suporta Faixas Amarelas, Quadriculado e Branco
+    previewBgToggle.addEventListener('click', (e) => {
+      const btn = e.target.closest('.seg-btn');
+      if (!btn) return;
+      previewBgToggle.querySelectorAll('.seg-btn').forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      
+      const mode = btn.dataset.bg;
+      resultFrame.classList.remove('stripes', 'checker', 'white-bg');
+      
+      if (mode === 'stripes') {
+        resultFrame.classList.add('stripes');
+      } else if (mode === 'checker') {
+        resultFrame.classList.add('checker');
+      } else if (mode === 'white') {
+        resultFrame.classList.add('white-bg');
+      }
+    });
+
+    // ---------- Processamento de Linhas ----------
+    function hexToRgb(hex){
+      const v = parseInt(hex.slice(1), 16);
+      return [(v >> 16) & 255, (v >> 8) & 255, v & 255];
+    }
+
+    function despeckle(imageData, w, h){
+      const data = imageData.data;
+      const alphaCopy = new Uint8ClampedArray(w * h);
+      for (let i = 0, p = 0; i < data.length; i += 4, p++) alphaCopy[p] = data[i + 3];
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const idx = y * w + x;
+          if (alphaCopy[idx] < 10) continue;
+          let hasNeighbor = false;
+          for (let dy = -1; dy <= 1 && !hasNeighbor; dy++) {
+            for (let dx = -1; dx <= 1; dx++) {
+              if (dx === 0 && dy === 0) continue;
+              const nx = x + dx, ny = y + dy;
+              if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+              if (alphaCopy[ny * w + nx] >= 10) { hasNeighbor = true; break; }
+            }
+          }
+          if (!hasNeighbor) data[idx * 4 + 3] = 0;
+        }
+      }
+    }
+
+    let rafId = null;
+    function scheduleProcess(){
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => { process(); rafId = null; });
+    }
+
+    function process(){
+      if (!state.srcImageData) return;
+      const w = state.width, h = state.height;
+      const src = state.srcImageData.data;
+      const rctx = resultCanvas.getContext('2d');
+      const out = rctx.createImageData(w, h);
+      const od = out.data;
+
+      const dark = state.darkPoint, light = state.lightPoint, gamma = state.gamma;
+      const range = Math.max(1, light - dark);
+      const solid = state.colorMode === 'solid';
+      const [lr, lg, lb] = hexToRgb(state.lineColor);
+      const invert = state.invert;
+
+      for (let i = 0; i < src.length; i += 4) {
+        const r = src[i], g = src[i + 1], b = src[i + 2], a = src[i + 3];
+        const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+        let t = (lum - dark) / range;
+        t = t < 0 ? 0 : (t > 1 ? 1 : t);
+        let alpha = 1 - t;
+        if (gamma !== 1) alpha = Math.pow(alpha, gamma);
+        if (invert) alpha = 1 - alpha;
+        alpha *= a / 255;
+
+        od[i]     = solid ? lr : r;
+        od[i + 1] = solid ? lg : g;
+        od[i + 2] = solid ? lb : b;
+        od[i + 3] = Math.round(alpha * 255);
+      }
+
+      if (state.despeckle) despeckle(out, w, h);
+
+      rctx.putImageData(out, 0, 0);
+    }
+
+    // ---------- Gerenciador de Presets ----------
+    function syncControlsFromState(){
+      darkPointInput.value = state.darkPoint; darkVal.textContent = state.darkPoint;
+      lightPointInput.value = state.lightPoint; lightVal.textContent = state.lightPoint;
+      gammaInput.value = state.gamma; gammaVal.textContent = state.gamma.toFixed(2);
+      document.querySelector('input[name=colorMode][value="' + state.colorMode + '"]').checked = true;
+      lineColorInput.value = state.lineColor;
+      lineColorInput.disabled = state.colorMode !== 'solid';
+      despeckleInput.checked = state.despeckle;
+      invertInput.checked = state.invert;
+      drawHistogram();
+      scheduleProcess();
+    }
+
+    function applyPreset(p){
+      state.darkPoint = p.dark; state.lightPoint = p.light; state.gamma = p.gamma;
+      state.colorMode = p.colorMode; state.lineColor = p.lineColor;
+      state.despeckle = p.despeckle; state.invert = p.invert;
+      syncControlsFromState();
+    }
+
+    function renderBuiltinPresets(){
+      builtinPresetsEl.innerHTML = '';
+      BUILTIN_PRESETS.forEach((p) => {
+        const btn = document.createElement('button');
+        btn.className = 'chip-btn';
+        btn.type = 'button';
+        btn.textContent = p.name;
+        btn.addEventListener('click', () => applyPreset(p));
+        builtinPresetsEl.appendChild(btn);
+      });
+    }
+
+    resetBtn.addEventListener('click', () => applyPreset(BUILTIN_PRESETS[0]));
+
+    // ---------- Exportação ----------
+    downloadBtn.addEventListener('click', () => {
+      resultCanvas.toBlob((blob) => {
+        if (!blob) return;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = state.fileBaseName + '_transparent.png';
+        a.click();
+        URL.revokeObjectURL(url);
+      }, 'image/png');
+    });
+
+    // ---------- Inicialização ----------
+    renderBuiltinPresets();
+    drawHistogram();
+  })();
+  </script>
+</body>
+</html>
