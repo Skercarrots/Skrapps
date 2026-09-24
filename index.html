@@ -68,7 +68,13 @@
       {
         title: "Squeeeeze",
         desc: "High-efficiency lossless perceptual image compressor",
-        icon: "🖼️",
+        // Custom badge HTML matching the Squeeeeze branding:
+        badgeHtml: `
+          <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-950 via-purple-900/60 to-slate-900 border border-indigo-500/40 flex items-center justify-center select-none group-hover:scale-110 transition-transform shadow-md shadow-indigo-950/60">
+            <span class="text-2xl font-serif italic font-bold text-indigo-100 tracking-tighter">e</span>
+            <sup class="text-xs font-mono font-bold text-cyan-400 ml-0.5 -mt-2">-4</sup>
+          </div>
+        `,
         tag: "Utility",
         path: "squeeeeze/"
       }
@@ -98,12 +104,17 @@
         card.href = `./${app.path}`;
         card.className = "group relative p-6 rounded-2xl bg-slate-900/50 border border-slate-800/80 hover:border-orange-500/40 hover:bg-slate-900/80 transition-all duration-300 backdrop-blur-sm flex flex-col justify-between hover:-translate-y-1 hover:shadow-xl hover:shadow-orange-500/5";
 
+        // Logic to choose between custom badge HTML or standard emoji box
+        const iconElement = app.badgeHtml ? app.badgeHtml : `
+          <div class="w-12 h-12 rounded-xl bg-slate-800/70 border border-slate-700/50 flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">
+            ${app.icon || "📦"}
+          </div>
+        `;
+
         card.innerHTML = `
           <div>
             <div class="flex items-center justify-between mb-4">
-              <div class="w-12 h-12 rounded-xl bg-slate-800/70 border border-slate-700/50 flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">
-                ${app.icon}
-              </div>
+              ${iconElement}
               ${app.tag ? `<span class="text-[11px] font-medium text-orange-400/90 bg-orange-500/10 border border-orange-500/20 px-2.5 py-0.5 rounded-full">${app.tag}</span>` : ""}
             </div>
             <h2 class="text-base font-semibold text-slate-100 group-hover:text-orange-400 transition-colors">
