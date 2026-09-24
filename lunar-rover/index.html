@@ -1,1 +1,1936 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lunar Rover Autonomous Exploration Simulator // Mission Control</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js CDN for live performance metrics -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            lunar: {
+              950: '#04060a',
+              900: '#080c14',
+              850: '#0e1420',
+              800: '#141c2c',
+              750: '#1c263c',
+              700: '#26344f',
+              600: '#3b4e72',
+            },
+            hud: {
+              cyan: '#00f0ff',
+              emerald: '#10b981',
+              amber: '#f59e0b',
+              rose: '#f43f5e',
+              violet: '#a855f7',
+            }
+          },
+          boxShadow: {
+            'glow-cyan': '0 0 16px rgba(0, 240, 255, 0.35)',
+            'glow-emerald': '0 0 16px rgba(16, 185, 129, 0.35)',
+            'glow-rose': '0 0 16px rgba(244, 63, 94, 0.4)',
+            'glow-violet': '0 0 16px rgba(168, 85, 247, 0.35)',
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* Custom scrollbars and HUD styling */
+    ::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #080c14;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #1c263c;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #26344f;
+    }
+    .canvas-container {
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: none;
+    }
+    .grid-pattern {
+      background-size: 20px 20px;
+      background-image: 
+        linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+    }
+  </style>
+</head>
+<body class="bg-lunar-950 text-slate-200 font-sans min-h-screen flex flex-col antialiased selection:bg-cyan-500 selection:text-black">
+
+  <header class="border-b border-lunar-700/80 bg-lunar-900/90 backdrop-blur sticky top-0 z-40 px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 shadow-md">
+    <div class="flex items-center gap-3">
+      <div class="relative flex items-center justify-center w-8 h-8 rounded-lg bg-cyan-950/80 border border-cyan-500/50 shadow-glow-cyan">
+        <svg class="w-5 h-5 text-cyan-400 animate-spin" style="animation-duration: 12s;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"></circle>
+          <path d="M12 2a10 10 0 0 1 10 10"></path>
+        </svg>
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <h1 class="text-sm md:text-base font-bold tracking-wider text-white font-mono flex items-center gap-1.5">
+            LUNAR-SURVIVOR // <span class="text-cyan-400">AUTONOMOUS EXPEDITION ENGINE</span>
+          </h1>
+          <span class="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-cyan-500/10 border border-cyan-500/30 text-cyan-300">v2.5 ENG</span>
+        </div>
+        <p class="text-xs text-slate-400 hidden sm:block">Frontier Exploration with Safe Energy Return Constraints to Lunar Base</p>
+      </div>
+    </div>
+
+    <!-- Live Telemetry Status Ticker -->
+    <div class="flex items-center gap-3 md:gap-4 text-xs font-mono">
+      <div class="flex items-center gap-2 bg-lunar-850 px-3 py-1.5 rounded-md border border-lunar-700">
+        <span class="text-slate-400">STATE:</span>
+        <span id="rover-state-badge" class="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
+          IDLE
+        </span>
+      </div>
+      <div class="flex items-center gap-2 bg-lunar-850 px-3 py-1.5 rounded-md border border-lunar-700">
+        <span class="text-slate-400">COVERAGE:</span>
+        <span id="quick-map-pct" class="font-bold text-cyan-400">0.0%</span>
+      </div>
+      <div class="flex items-center gap-2 bg-lunar-850 px-3 py-1.5 rounded-md border border-lunar-700">
+        <span class="text-slate-400">BATTERY:</span>
+        <div class="w-16 h-2 bg-lunar-750 rounded-full overflow-hidden flex">
+          <div id="quick-bat-bar" class="h-full bg-emerald-500 transition-all duration-200" style="width: 100%"></div>
+        </div>
+        <span id="quick-bat-text" class="font-bold text-emerald-400">100%</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="flex-1 max-w-[1780px] w-full mx-auto p-2 sm:p-4 grid grid-cols-1 lg:grid-cols-12 gap-4">
+
+    <!-- Left Column: Controls, Algorithms & Parameters (3 cols) -->
+    <section class="lg:col-span-3 flex flex-col gap-4">
+      
+      <!-- Simulation Controls Card -->
+      <div class="bg-lunar-900 rounded-xl border border-lunar-700/80 p-4 shadow-lg flex flex-col gap-3.5">
+        <div class="flex items-center justify-between border-b border-lunar-700/60 pb-2">
+          <span class="text-xs font-mono font-bold tracking-wider text-slate-300 uppercase flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-cyan-400"></span> Mission Controls
+          </span>
+          <span id="step-counter" class="text-xs font-mono text-cyan-400 bg-cyan-950/60 px-2 py-0.5 rounded border border-cyan-800">Step: 0</span>
+        </div>
+
+        <!-- Start / Pause & Step Buttons -->
+        <div class="grid grid-cols-2 gap-2">
+          <button id="btn-play" class="flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg font-semibold text-xs tracking-wider transition-all bg-gradient-to-r from-cyan-500 to-cyan-400 hover:from-cyan-400 hover:to-cyan-300 text-black font-mono shadow-glow-cyan active:scale-95">
+            <svg id="play-icon" class="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+            <span id="play-text">START</span>
+          </button>
+          <button id="btn-step" class="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-lg font-mono text-xs tracking-wider font-semibold transition-all bg-lunar-800 hover:bg-lunar-750 text-slate-200 border border-lunar-600 active:scale-95">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg>
+            STEP
+          </button>
+        </div>
+
+        <!-- Reset & Re-generate buttons -->
+        <div class="grid grid-cols-2 gap-2">
+          <button id="btn-reset-expedition" class="py-1.5 px-3 rounded text-[11px] font-mono bg-lunar-850 hover:bg-lunar-800 text-slate-300 border border-lunar-700 transition">
+            Reset Rover
+          </button>
+          <button id="btn-new-map" class="py-1.5 px-3 rounded text-[11px] font-mono bg-lunar-850 hover:bg-lunar-800 text-cyan-300 border border-cyan-800/60 hover:border-cyan-500 transition">
+            Regenerate Map
+          </button>
+        </div>
+
+        <!-- World Size Configuration Selector -->
+        <div class="space-y-1 pt-1 border-t border-lunar-800">
+          <div class="flex justify-between text-xs font-mono text-slate-400">
+            <span>World Grid Dimensions</span>
+            <span id="world-size-label" class="text-cyan-400 font-bold">48 × 48</span>
+          </div>
+          <div class="grid grid-cols-4 gap-1.5 pt-0.5">
+            <button class="btn-world-size py-1 text-[11px] font-mono rounded border border-lunar-700 bg-lunar-850 hover:border-cyan-500 text-slate-300" data-size="32">32²</button>
+            <button class="btn-world-size py-1 text-[11px] font-mono rounded border border-cyan-500 bg-cyan-950/40 text-cyan-300 font-bold" data-size="48">48²</button>
+            <button class="btn-world-size py-1 text-[11px] font-mono rounded border border-lunar-700 bg-lunar-850 hover:border-cyan-500 text-slate-300" data-size="64">64²</button>
+            <button class="btn-world-size py-1 text-[11px] font-mono rounded border border-lunar-700 bg-lunar-850 hover:border-cyan-500 text-slate-300" data-size="80">80²</button>
+          </div>
+        </div>
+
+        <!-- Simulation Speed Slider -->
+        <div class="space-y-1.5 pt-1">
+          <div class="flex justify-between text-xs font-mono text-slate-400">
+            <span>Execution Speed</span>
+            <span id="speed-label" class="text-cyan-400 font-bold">15 steps/s</span>
+          </div>
+          <input id="slider-speed" type="range" min="1" max="60" value="15" class="w-full h-1.5 bg-lunar-750 rounded-lg appearance-none cursor-pointer accent-cyan-400">
+          <div class="flex justify-between text-[10px] font-mono text-slate-500">
+            <span>1x (Analytical)</span>
+            <span>Turbo (60x)</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Algorithm Selection Card -->
+      <div class="bg-lunar-900 rounded-xl border border-lunar-700/80 p-4 shadow-lg flex flex-col gap-3">
+        <div class="flex items-center justify-between border-b border-lunar-700/60 pb-2">
+          <span class="text-xs font-mono font-bold tracking-wider text-slate-300 uppercase flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-violet-400"></span> Exploration Strategy
+          </span>
+          <span class="text-[10px] font-mono text-slate-400">Select & Learn</span>
+        </div>
+
+        <div class="space-y-2.5 text-xs">
+          <!-- Alg 1: Safe Budget Frontier -->
+          <div class="alg-option relative flex flex-col p-2.5 rounded-lg border border-cyan-500/60 bg-cyan-950/25 transition">
+            <div class="flex items-start justify-between gap-2">
+              <label class="flex items-start gap-2 cursor-pointer flex-1">
+                <input type="radio" name="algorithm" value="budget_frontier" checked class="mt-0.5 text-cyan-500 focus:ring-0 accent-cyan-400">
+                <div>
+                  <div class="font-bold text-cyan-300 flex items-center gap-1.5">
+                    Budget-Constrained Frontier
+                    <span class="text-[9px] px-1 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">SAFE</span>
+                  </div>
+                  <p class="text-[11px] text-slate-400 mt-0.5">Calculates A* to frontier, validating safe base return margin with coefficient &alpha;.</p>
+                </div>
+              </label>
+              <button class="btn-open-doc flex-shrink-0 text-[10px] font-mono px-2 py-1 rounded bg-lunar-800 hover:bg-cyan-900/60 border border-lunar-600 hover:border-cyan-400 text-cyan-300 transition" data-alg="budget_frontier" title="View algorithm details, math and pseudocode">
+                📖 Docs
+              </button>
+            </div>
+          </div>
+
+          <!-- Alg 2: Next-Best-View (Utility Gain) -->
+          <div class="alg-option relative flex flex-col p-2.5 rounded-lg border border-lunar-700 bg-lunar-850 transition">
+            <div class="flex items-start justify-between gap-2">
+              <label class="flex items-start gap-2 cursor-pointer flex-1">
+                <input type="radio" name="algorithm" value="nbv_utility" class="mt-0.5 text-cyan-500 focus:ring-0 accent-cyan-400">
+                <div>
+                  <div class="font-bold text-slate-200 flex items-center gap-1.5">
+                    Next-Best-View (NBV Utility)
+                    <span class="text-[9px] px-1 py-0.2 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">ADAPTIVE</span>
+                  </div>
+                  <p class="text-[11px] text-slate-400 mt-0.5">Balances estimated information volume against energy cost and exponential risk penalty.</p>
+                </div>
+              </label>
+              <button class="btn-open-doc flex-shrink-0 text-[10px] font-mono px-2 py-1 rounded bg-lunar-800 hover:bg-cyan-900/60 border border-lunar-600 hover:border-cyan-400 text-cyan-300 transition" data-alg="nbv_utility" title="View algorithm details, math and pseudocode">
+                📖 Docs
+              </button>
+            </div>
+          </div>
+
+          <!-- Alg 3: Yamauchi Greedy -->
+          <div class="alg-option relative flex flex-col p-2.5 rounded-lg border border-lunar-700 bg-lunar-850 transition">
+            <div class="flex items-start justify-between gap-2">
+              <label class="flex items-start gap-2 cursor-pointer flex-1">
+                <input type="radio" name="algorithm" value="greedy_frontier" class="mt-0.5 text-cyan-500 focus:ring-0 accent-cyan-400">
+                <div>
+                  <div class="font-bold text-slate-200 flex items-center gap-1.5">
+                    Yamauchi Greedy Frontier
+                    <span class="text-[9px] px-1 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">RISKY</span>
+                  </div>
+                  <p class="text-[11px] text-slate-400 mt-0.5">Visits closest frontier without excursion pre-budgeting. Recalls only at critical reserve.</p>
+                </div>
+              </label>
+              <button class="btn-open-doc flex-shrink-0 text-[10px] font-mono px-2 py-1 rounded bg-lunar-800 hover:bg-cyan-900/60 border border-lunar-600 hover:border-cyan-400 text-cyan-300 transition" data-alg="greedy_frontier" title="View algorithm details, math and pseudocode">
+                📖 Docs
+              </button>
+            </div>
+          </div>
+
+          <!-- Alg 4: Random Explorer -->
+          <div class="alg-option relative flex flex-col p-2.5 rounded-lg border border-lunar-700 bg-lunar-850 transition">
+            <div class="flex items-start justify-between gap-2">
+              <label class="flex items-start gap-2 cursor-pointer flex-1">
+                <input type="radio" name="algorithm" value="random_bounce" class="mt-0.5 text-cyan-500 focus:ring-0 accent-cyan-400">
+                <div>
+                  <div class="font-bold text-slate-200 flex items-center gap-1.5">
+                    Random Walk Baseline
+                    <span class="text-[9px] px-1 py-0.2 rounded bg-slate-500/20 text-slate-400 border border-slate-500/30">BASELINE</span>
+                  </div>
+                  <p class="text-[11px] text-slate-400 mt-0.5">Brownian motion navigation baseline without heuristic frontier targeting.</p>
+                </div>
+              </label>
+              <button class="btn-open-doc flex-shrink-0 text-[10px] font-mono px-2 py-1 rounded bg-lunar-800 hover:bg-cyan-900/60 border border-lunar-600 hover:border-cyan-400 text-cyan-300 transition" data-alg="random_bounce" title="View algorithm details, math and pseudocode">
+                📖 Docs
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Parameter Adjustment Sliders -->
+      <div class="bg-lunar-900 rounded-xl border border-lunar-700/80 p-4 shadow-lg flex flex-col gap-3">
+        <span class="text-xs font-mono font-bold tracking-wider text-slate-300 uppercase flex items-center gap-2 border-b border-lunar-700/60 pb-2">
+          <span class="w-2 h-2 rounded-full bg-amber-400"></span> Physical Margins & Sensors
+        </span>
+
+        <!-- Alpha Safety Margin -->
+        <div class="space-y-1">
+          <div class="flex justify-between text-xs font-mono">
+            <span class="text-slate-400" title="Return battery safety factor">Return Safety Margin (Alpha &alpha;)</span>
+            <span id="val-alpha" class="text-amber-400 font-bold">1.35x</span>
+          </div>
+          <input id="slider-alpha" type="range" min="1.0" max="2.5" step="0.05" value="1.35" class="w-full h-1.5 bg-lunar-750 rounded appearance-none cursor-pointer accent-amber-400">
+          <p class="text-[10px] text-slate-500">Emergency Reserve = &alpha; &times; Cost(A* Safe Base Return)</p>
+        </div>
+
+        <!-- Max Battery Capacity -->
+        <div class="space-y-1 pt-1">
+          <div class="flex justify-between text-xs font-mono">
+            <span class="text-slate-400">Battery Capacity</span>
+            <span id="val-battery" class="text-emerald-400 font-bold">180 u</span>
+          </div>
+          <input id="slider-battery" type="range" min="80" max="400" step="10" value="180" class="w-full h-1.5 bg-lunar-750 rounded appearance-none cursor-pointer accent-emerald-400">
+        </div>
+
+        <!-- LiDAR Sensor Radius -->
+        <div class="space-y-1 pt-1">
+          <div class="flex justify-between text-xs font-mono">
+            <span class="text-slate-400">LiDAR Sensor Radius</span>
+            <span id="val-sensor" class="text-cyan-400 font-bold">4 cells</span>
+          </div>
+          <input id="slider-sensor" type="range" min="2" max="8" step="1" value="4" class="w-full h-1.5 bg-lunar-750 rounded appearance-none cursor-pointer accent-cyan-400">
+        </div>
+
+        <!-- Obstacle Density -->
+        <div class="space-y-1 pt-1">
+          <div class="flex justify-between text-xs font-mono">
+            <span class="text-slate-400">Crater & Boulder Density</span>
+            <span id="val-obstacles" class="text-rose-400 font-bold">18%</span>
+          </div>
+          <input id="slider-obstacles" type="range" min="5" max="35" step="1" value="18" class="w-full h-1.5 bg-lunar-750 rounded appearance-none cursor-pointer accent-rose-400">
+        </div>
+      </div>
+
+    </section>
+
+    <!-- Center Column: Canvas Viewport with Zoom & Pan Controls (6 cols) -->
+    <section class="lg:col-span-6 flex flex-col gap-3">
+      <div class="relative bg-lunar-900 rounded-xl border border-lunar-700/90 shadow-2xl overflow-hidden flex flex-col">
+        
+        <!-- Canvas Top Toolbar: Coordinates, Zoom & Layers -->
+        <div class="px-3 py-2 border-b border-lunar-700/80 bg-lunar-850/80 flex flex-wrap items-center justify-between gap-2 text-xs font-mono">
+          <div class="flex items-center gap-3">
+            <span class="text-slate-400 flex items-center gap-1.5">
+              <span class="inline-block w-2.5 h-2.5 rounded-sm bg-cyan-400/80"></span> BASE: <span id="base-coords" class="text-white font-bold">(24, 24)</span>
+            </span>
+            <span class="text-slate-400 flex items-center gap-1.5">
+              <span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" style="animation-duration: 3s"></span> ROVER: <span id="rover-coords" class="text-white font-bold">(24, 24)</span>
+            </span>
+          </div>
+
+          <!-- Camera Zoom & Pan Controls -->
+          <div class="flex items-center gap-1 bg-lunar-800 px-1.5 py-0.5 rounded border border-lunar-700">
+            <button id="btn-zoom-out" class="w-6 h-6 flex items-center justify-center rounded hover:bg-lunar-700 text-slate-300 font-bold hover:text-cyan-400 transition" title="Zoom Out (-)">-</button>
+            <span id="zoom-level-text" class="px-1 text-[11px] font-bold text-cyan-400 min-w-[38px] text-center">100%</span>
+            <button id="btn-zoom-in" class="w-6 h-6 flex items-center justify-center rounded hover:bg-lunar-700 text-slate-300 font-bold hover:text-cyan-400 transition" title="Zoom In (+)">+</button>
+            <button id="btn-zoom-reset" class="px-1.5 py-0.5 text-[10px] rounded hover:bg-lunar-700 text-slate-400 hover:text-white transition ml-1" title="Reset View (1:1 Recenter)">Reset</button>
+          </div>
+
+          <!-- Layer Toggles -->
+          <div class="flex items-center gap-2">
+            <label class="flex items-center gap-1 text-[11px] text-slate-400 cursor-pointer hover:text-slate-200">
+              <input type="checkbox" id="chk-fog" checked class="accent-cyan-400 rounded"> Fog of War
+            </label>
+            <label class="flex items-center gap-1 text-[11px] text-slate-400 cursor-pointer hover:text-slate-200">
+              <input type="checkbox" id="chk-frontiers" checked class="accent-violet-400 rounded"> Frontiers
+            </label>
+            <label class="flex items-center gap-1 text-[11px] text-slate-400 cursor-pointer hover:text-slate-200">
+              <input type="checkbox" id="chk-paths" checked class="accent-amber-400 rounded"> Paths
+            </label>
+          </div>
+        </div>
+
+        <!-- Main Interactive Canvas Viewport -->
+        <div id="canvas-wrapper" class="canvas-container relative w-full aspect-square bg-[#05070a] flex items-center justify-center overflow-hidden p-1 cursor-grab active:cursor-grabbing">
+          <canvas id="lunar-canvas" class="w-full h-full block rounded-lg shadow-inner"></canvas>
+          
+          <!-- Subtle On-Screen Pan & Zoom Helper Hint -->
+          <div class="absolute bottom-2 left-2 pointer-events-none px-2 py-1 rounded bg-lunar-950/70 border border-lunar-800 text-[10px] font-mono text-slate-400">
+            Drag to pan • Wheel to zoom
+          </div>
+
+          <!-- Stranded Emergency Alert Overlay (Shown on Game Over) -->
+          <div id="stranded-overlay" class="absolute inset-0 bg-rose-950/85 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center transition-opacity duration-300 opacity-0 pointer-events-none z-30">
+            <div class="w-16 h-16 rounded-full bg-rose-500/20 border-2 border-rose-500 flex items-center justify-center mb-3 shadow-glow-rose animate-bounce">
+              <svg class="w-8 h-8 text-rose-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+            </div>
+            <h3 class="text-lg font-bold font-mono text-rose-400 tracking-wider uppercase mb-1">ROVER STRANDED // MISSION FAILURE</h3>
+            <p class="text-xs text-slate-300 max-w-md mb-4">The rover depleted all battery cells before reaching the lunar base station. The active algorithm failed to enforce sufficient return energy reserves.</p>
+            <button id="btn-rescue" class="py-2 px-5 rounded font-mono text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white shadow-glow-rose transition">
+              RESCUE & RELOCATE TO BASE
+            </button>
+          </div>
+        </div>
+
+        <!-- Legend Ribbon -->
+        <div class="px-4 py-2 bg-lunar-850/70 border-t border-lunar-700/60 flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono text-slate-400">
+          <div class="flex items-center gap-3">
+            <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 bg-cyan-400 rounded-sm"></span> Base Station</span>
+            <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 bg-emerald-400 rounded-full"></span> Rover</span>
+            <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 bg-violet-400 rounded-sm"></span> Frontiers</span>
+            <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 bg-[#475569] rounded-sm"></span> Craters</span>
+          </div>
+          <div class="flex items-center gap-3">
+            <span class="flex items-center gap-1.5"><span class="w-3 h-0.5 bg-cyan-400"></span> Exploration Path</span>
+            <span class="flex items-center gap-1.5"><span class="w-3 h-0.5 bg-amber-400 border-b border-dashed border-amber-400"></span> Return Corridor</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Telemetry Chart Card -->
+      <div class="bg-lunar-900 rounded-xl border border-lunar-700/80 p-3.5 shadow-lg flex flex-col gap-2">
+        <div class="flex items-center justify-between text-xs font-mono">
+          <span class="font-bold text-slate-300 flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-cyan-400"></span> Real-Time Telemetry (Battery & Coverage)
+          </span>
+          <span class="text-[10px] text-slate-500">Last 50 steps</span>
+        </div>
+        <div class="h-32 w-full relative">
+          <canvas id="chart-telemetry"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- Right Column: Decision Inspector & Mission Analytics (3 cols) -->
+    <section class="lg:col-span-3 flex flex-col gap-4">
+      
+      <!-- Real-time Mathematical Decision Inspector -->
+      <div class="bg-lunar-900 rounded-xl border border-lunar-700/80 p-4 shadow-lg flex flex-col gap-3">
+        <div class="flex items-center justify-between border-b border-lunar-700/60 pb-2">
+          <span class="text-xs font-mono font-bold tracking-wider text-cyan-400 uppercase flex items-center gap-2">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+            Decision Inspector
+          </span>
+          <span class="text-[10px] font-mono text-slate-400">Real-Time</span>
+        </div>
+
+        <!-- Math Readout Boxes -->
+        <div class="space-y-2 text-xs font-mono">
+          <div class="p-2.5 rounded-lg bg-lunar-850 border border-lunar-700/80 flex flex-col gap-1">
+            <div class="text-[10px] text-slate-400 uppercase">Selected Frontier Target</div>
+            <div id="inspector-target" class="text-cyan-300 font-bold text-sm">--</div>
+            <div id="inspector-gain" class="text-[11px] text-slate-400">Estimated Info Gain: -- cells</div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2">
+            <div class="p-2 rounded-lg bg-lunar-850 border border-lunar-700/80">
+              <div class="text-[9px] text-slate-400 uppercase">Outward A* Cost</div>
+              <div id="inspector-cost-out" class="text-white font-bold text-sm">-- u</div>
+            </div>
+            <div class="p-2 rounded-lg bg-lunar-850 border border-lunar-700/80">
+              <div class="text-[9px] text-slate-400 uppercase">Base Return A* Cost</div>
+              <div id="inspector-cost-back" class="text-amber-300 font-bold text-sm">-- u</div>
+            </div>
+          </div>
+
+          <!-- Mathematical Feasibility Condition Check -->
+          <div class="p-2.5 rounded-lg bg-lunar-950 border border-cyan-500/30">
+            <div class="text-[9px] text-slate-400 uppercase flex items-center justify-between mb-1">
+              <span>Feasibility Inequality</span>
+              <span id="budget-status-tag" class="text-[9px] px-1 py-0.2 rounded font-bold bg-emerald-500/20 text-emerald-400">OK</span>
+            </div>
+            <div class="text-[11px] text-slate-300 font-mono leading-relaxed">
+              <span class="text-slate-400">Total Budget:</span> <span id="eq-cost-total" class="font-bold text-cyan-300">--</span> 
+              &le; <span class="text-slate-400">Battery:</span> <span id="eq-battery-cur" class="font-bold text-emerald-400">--</span>
+            </div>
+            <div class="text-[9px] text-slate-400 mt-1 border-t border-lunar-800 pt-1">
+              Emergency Reserve (&alpha; &times; D_base): <span id="eq-reserve-req" class="text-amber-400 font-bold">-- u</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Cumulative Mission Stats Card -->
+      <div class="bg-lunar-900 rounded-xl border border-lunar-700/80 p-4 shadow-lg flex flex-col gap-3">
+        <span class="text-xs font-mono font-bold tracking-wider text-slate-300 uppercase flex items-center gap-2 border-b border-lunar-700/60 pb-2">
+          <span class="w-2 h-2 rounded-full bg-emerald-400"></span> Mission Metrics
+        </span>
+
+        <div class="grid grid-cols-2 gap-2 font-mono text-center">
+          <div class="p-2 rounded-lg bg-lunar-850 border border-lunar-700">
+            <div class="text-[10px] text-slate-400">EXPEDITIONS OK</div>
+            <div id="metric-expeditions" class="text-lg font-bold text-emerald-400">0</div>
+          </div>
+          <div class="p-2 rounded-lg bg-lunar-850 border border-lunar-700">
+            <div class="text-[10px] text-slate-400">FAILURES / STRANDED</div>
+            <div id="metric-stranded" class="text-lg font-bold text-rose-400">0</div>
+          </div>
+          <div class="p-2 rounded-lg bg-lunar-850 border border-lunar-700">
+            <div class="text-[10px] text-slate-400">TOTAL CELLS MAPPED</div>
+            <div id="metric-mapped-cells" class="text-base font-bold text-cyan-400">0 cel</div>
+          </div>
+          <div class="p-2 rounded-lg bg-lunar-850 border border-lunar-700">
+            <div class="text-[10px] text-slate-400">TOTAL SIM STEPS</div>
+            <div id="metric-total-steps" class="text-base font-bold text-slate-200">0</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Mission Events Terminal Log -->
+      <div class="bg-lunar-900 rounded-xl border border-lunar-700/80 p-4 shadow-lg flex-1 flex flex-col gap-2 min-h-[190px]">
+        <div class="flex items-center justify-between border-b border-lunar-700/60 pb-1.5">
+          <span class="text-xs font-mono font-bold tracking-wider text-slate-400 uppercase flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-slate-500"></span> Event Terminal
+          </span>
+          <button id="btn-clear-log" class="text-[10px] font-mono text-slate-500 hover:text-slate-300">Clear</button>
+        </div>
+        <div id="event-log" class="flex-1 overflow-y-auto font-mono text-[11px] space-y-1 pr-1 max-h-[220px] text-slate-400">
+          <div class="text-cyan-400">[00:00:00] System initialized. Waiting for dispatch command.</div>
+        </div>
+      </div>
+
+    </section>
+  </main>
+
+  <!-- Comprehensive Algorithm Documentation Modal -->
+  <div id="alg-doc-modal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-3 sm:p-6 opacity-0 pointer-events-none transition-opacity duration-200">
+    <div class="bg-lunar-900 border border-lunar-700 w-full max-w-4xl max-h-[90vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+      
+      <!-- Modal Header with Tab Navigation -->
+      <div class="p-4 border-b border-lunar-700 bg-lunar-850 flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-2.5">
+          <div class="p-2 rounded-lg bg-cyan-950 border border-cyan-500/40 text-cyan-400">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
+          </div>
+          <div>
+            <h2 class="text-base font-bold text-white font-mono flex items-center gap-2">
+              EXPLORATION ALGORITHM SPECIFICATION
+            </h2>
+            <p class="text-xs text-slate-400">Robotic motion planning, mathematical optimization & energy budgeting</p>
+          </div>
+        </div>
+
+        <button id="btn-close-modal" class="w-8 h-8 rounded-lg bg-lunar-800 hover:bg-lunar-700 text-slate-300 hover:text-white flex items-center justify-center font-bold text-sm transition">
+          ✕
+        </button>
+      </div>
+
+      <!-- Algorithm Tabs Bar -->
+      <div class="flex border-b border-lunar-800 bg-lunar-950 px-4 overflow-x-auto gap-2">
+        <button class="modal-tab-btn py-2.5 px-3 text-xs font-mono border-b-2 border-cyan-400 text-cyan-400 font-bold whitespace-nowrap" data-tab="budget_frontier">
+          Budget-Constrained Frontier
+        </button>
+        <button class="modal-tab-btn py-2.5 px-3 text-xs font-mono border-b-2 border-transparent text-slate-400 hover:text-slate-200 whitespace-nowrap" data-tab="nbv_utility">
+          Next-Best-View (NBV Utility)
+        </button>
+        <button class="modal-tab-btn py-2.5 px-3 text-xs font-mono border-b-2 border-transparent text-slate-400 hover:text-slate-200 whitespace-nowrap" data-tab="greedy_frontier">
+          Yamauchi Greedy
+        </button>
+        <button class="modal-tab-btn py-2.5 px-3 text-xs font-mono border-b-2 border-transparent text-slate-400 hover:text-slate-200 whitespace-nowrap" data-tab="random_bounce">
+          Random Baseline
+        </button>
+      </div>
+
+      <!-- Modal Content Body -->
+      <div class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 text-slate-300 text-xs sm:text-sm">
+        
+        <!-- Tab 1: Budget-Constrained Frontier -->
+        <div id="tab-content-budget_frontier" class="modal-tab-panel space-y-4">
+          <div class="flex items-center justify-between">
+            <h3 class="text-base font-bold text-white font-mono">1. Budget-Constrained Frontier Exploration (BCFE)</h3>
+            <span class="px-2 py-0.5 rounded text-[11px] font-mono bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">Industry Standard</span>
+          </div>
+
+          <p class="leading-relaxed">
+            Frontier exploration (first formalized by Brian Yamauchi) detects boundaries between known free space and unknown unexplored territory. In space robotics (such as NASA VIPER, ESA Rosalind Franklin, or lunar rovers), the classic formulation suffers from fatal battery stranding because it does not model the energy cost of returning to a power station.
+          </p>
+
+          <div class="p-3.5 rounded-xl bg-lunar-950 border border-cyan-500/30 font-mono text-xs space-y-2">
+            <div class="text-cyan-400 font-bold uppercase">Mathematical Formulation</div>
+            <div class="text-slate-200 bg-lunar-900 p-2.5 rounded border border-lunar-800">
+              f* = arg max<sub>f &isin; F<sub>feasible</sub></sub> [ w<sub>1</sub> &middot; I(f) - w<sub>2</sub> &middot; D<sub>rover</sub>(f) ]
+            </div>
+            <div class="text-slate-400 leading-relaxed">
+              Subject to the Feasibility Constraint:
+              <br>
+              <strong class="text-amber-400">D<sub>rover</sub>(f) + &alpha; &middot; D<sub>base</sub>(f) &le; Battery<sub>current</sub></strong>
+            </div>
+          </div>
+
+          <div class="grid sm:grid-cols-2 gap-3 text-xs font-mono">
+            <div class="p-3 rounded-lg bg-lunar-850 border border-lunar-700 space-y-1">
+              <span class="text-cyan-400 font-bold">Why the Safety Factor (&alpha; &gt; 1.0)?</span>
+              <p class="text-slate-400 font-sans leading-relaxed">
+                Lunar regolith induces wheel slippage (slip ratios up to 20-30%). Newly revealed obstacles can block the originally estimated return corridor. Setting &alpha; = 1.35 ensures the rover reserves 35% surplus energy to handle detours.
+              </p>
+            </div>
+            <div class="p-3 rounded-lg bg-lunar-850 border border-lunar-700 space-y-1">
+              <span class="text-emerald-400 font-bold">Guaranteed Invariant</span>
+              <p class="text-slate-400 font-sans leading-relaxed">
+                As long as the rover's known map preserves a connected path to base, the rover will never be stranded, achieving 0% failure rates across arbitrary terrain topologies.
+              </p>
+            </div>
+          </div>
+
+          <div class="space-y-1.5 font-mono text-xs">
+            <span class="text-slate-400 uppercase font-bold">Algorithmic Pseudocode</span>
+            <pre class="p-3 rounded-lg bg-lunar-950 border border-lunar-800 text-slate-300 overflow-x-auto"><code>function SelectBudgetedGoal(frontiers, rover, base, alpha):
+    bestGoal &larr; null
+    maxUtility &larr; -&infin;
+
+    for each f in frontiers:
+        pathOut &larr; AStar(rover.pos, f.pos, allowUnexplored=true)
+        if pathOut is null: continue
+
+        pathHome &larr; AStar(f.pos, base.pos, allowUnexplored=false)
+        if pathHome is null: continue
+
+        budgetRequired = length(pathOut) + (alpha * length(pathHome))
+        if budgetRequired &le; rover.battery:
+            infoGain = EstimateUnmappedNeighbors(f.pos)
+            utility = (infoGain * 1.5) - (length(pathOut) * 1.0)
+            if utility &gt; maxUtility:
+                maxUtility = utility
+                bestGoal = f
+
+    return bestGoal // If null, initiate immediate Safe-Home-Return</code></pre>
+          </div>
+        </div>
+
+        <!-- Tab 2: Next-Best-View (NBV Utility) -->
+        <div id="tab-content-nbv_utility" class="modal-tab-panel hidden space-y-4">
+          <div class="flex items-center justify-between">
+            <h3 class="text-base font-bold text-white font-mono">2. Next-Best-View (NBV) Utility Maximization</h3>
+            <span class="px-2 py-0.5 rounded text-[11px] font-mono bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">Adaptive Information Gain</span>
+          </div>
+
+          <p class="leading-relaxed">
+            Next-Best-View (NBV) treats exploration as an active perception problem. Instead of simply reaching boundaries, it calculates the solid angle or volume of unmapped terrain uncovered per unit of energy expended, balancing scientific discovery against risk.
+          </p>
+
+          <div class="p-3.5 rounded-xl bg-lunar-950 border border-cyan-500/30 font-mono text-xs space-y-2">
+            <div class="text-cyan-400 font-bold uppercase">Utility Function with Exponential Risk Decay</div>
+            <div class="text-slate-200 bg-lunar-900 p-2.5 rounded border border-lunar-800">
+              U(f) = [ I(f) / (D<sub>rover</sub>(f) + 1) ] &minus; &lambda; &middot; exp( - [Battery - Cost<sub>total</sub>(f)] / &tau; )
+            </div>
+            <p class="text-slate-400 leading-relaxed">
+              When battery surplus is high, the exponential penalty is negligible, allowing the agent to target high-yield frontiers. When surplus drops towards zero, the penalty term explodes, naturally forcing the rover to abort outward exploration and prioritize return paths.
+            </p>
+          </div>
+
+          <div class="grid sm:grid-cols-2 gap-3 text-xs font-mono">
+            <div class="p-3 rounded-lg bg-lunar-850 border border-lunar-700 space-y-1">
+              <span class="text-cyan-400 font-bold">Advantages</span>
+              <p class="text-slate-400 font-sans leading-relaxed">
+                Prioritizes open expanses with immense sensor coverage rather than narrow corridors with low information yield.
+              </p>
+            </div>
+            <div class="p-3 rounded-lg bg-lunar-850 border border-lunar-700 space-y-1">
+              <span class="text-amber-400 font-bold">Tuning Sensitivity</span>
+              <p class="text-slate-400 font-sans leading-relaxed">
+                Requires calibrating &tau; and &lambda;. An aggressive setting may push the rover slightly deeper than safe bounds if a very high-gain view is detected nearby.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab 3: Yamauchi Greedy -->
+        <div id="tab-content-greedy_frontier" class="modal-tab-panel hidden space-y-4">
+          <div class="flex items-center justify-between">
+            <h3 class="text-base font-bold text-white font-mono">3. Yamauchi Greedy Frontier Search</h3>
+            <span class="px-2 py-0.5 rounded text-[11px] font-mono bg-amber-500/20 text-amber-300 border border-amber-500/30">Historical Baseline</span>
+          </div>
+
+          <p class="leading-relaxed">
+            Introduced by Brian Yamauchi in 1997 ("A Frontier-Based Approach for Autonomous Exploration"), this algorithm seeks to minimize travel distance by always steering the robot toward the geometrically nearest frontier cell.
+          </p>
+
+          <div class="p-3.5 rounded-xl bg-lunar-950 border border-amber-500/30 font-mono text-xs space-y-2">
+            <div class="text-amber-400 font-bold uppercase">Decision Formulation</div>
+            <div class="text-slate-200 bg-lunar-900 p-2.5 rounded border border-lunar-800">
+              f* = arg min<sub>f &isin; F</sub> [ D<sub>rover</sub>(f) ]
+            </div>
+            <p class="text-slate-400 leading-relaxed">
+              <strong class="text-rose-400">The Fatal Planetary Flaw:</strong> It contains zero advance awareness of the base location during target selection. The rover happily ventures deep into distant craters, only checking battery when already at the critical margin. If a newly discovered obstacle blocks the direct way back, the rover becomes stranded.
+            </p>
+          </div>
+        </div>
+
+        <!-- Tab 4: Random Baseline -->
+        <div id="tab-content-random_bounce" class="modal-tab-panel hidden space-y-4">
+          <div class="flex items-center justify-between">
+            <h3 class="text-base font-bold text-white font-mono">4. Random Walk Baseline</h3>
+            <span class="px-2 py-0.5 rounded text-[11px] font-mono bg-slate-500/20 text-slate-300 border border-slate-500/30">Null Hypothesis</span>
+          </div>
+
+          <p class="leading-relaxed">
+            A stochastic reactive controller similar to simple robotic vacuum cleaners. The rover picks random valid trajectories among reachable frontiers, demonstrating what happens without frontier clustering, graph utility optimization, or path planning.
+          </p>
+          <p class="text-xs text-slate-400">
+            Used in robotics literature as a control experiment to quantify the exact efficiency gains of deliberate SLAM and utility-directed navigation.
+          </p>
+        </div>
+
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="p-3 bg-lunar-850 border-t border-lunar-700 flex justify-end">
+        <button id="btn-close-modal-footer" class="py-1.5 px-4 rounded font-mono text-xs bg-lunar-750 hover:bg-lunar-700 text-white transition">
+          Close Documentation
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    /* ==========================================================================
+       CONSTANTS & SIMULATION STATE
+       ========================================================================== */
+    let GRID_SIZE = 48; // Dynamic: 32, 48, 64, or 80
+    let BASE_POS = { x: Math.floor(GRID_SIZE / 2), y: Math.floor(GRID_SIZE / 2) };
+
+    // Cell Definitions
+    const CELL_UNKNOWN = 0;   // Fog of war / unexplored
+    const CELL_FREE = 1;      // Explored free terrain
+    const CELL_OBSTACLE = 2;  // Impassable crater or boulder
+    const CELL_BASE = 3;      // Lunar Base station
+
+    // Rover States
+    const STATE_IDLE = 'IDLE';
+    const STATE_MAPPING = 'MAPPING';
+    const STATE_OUTWARD = 'EXPLORING';
+    const STATE_HOMEBOUND = 'RETURNING';
+    const STATE_RECHARGING = 'RECHARGING';
+    const STATE_STRANDED = 'OUT_OF_BATTERY';
+
+    // Core Simulation Environment
+    const sim = {
+      // True world ground truth
+      worldGrid: new Uint8Array(GRID_SIZE * GRID_SIZE),
+      // Mental map constructed via SLAM/LiDAR
+      knownGrid: new Uint8Array(GRID_SIZE * GRID_SIZE),
+
+      // Rover Entity
+      rover: {
+        x: BASE_POS.x,
+        y: BASE_POS.y,
+        prevX: BASE_POS.x,
+        prevY: BASE_POS.y,
+        dirX: 0,
+        dirY: -1,
+        battery: 180,
+        maxBattery: 180,
+        state: STATE_IDLE,
+        activePath: [],       // Array of {x, y} to current frontier
+        plannedReturnPath: [],// Array of {x, y} from current pos to base
+        history: [],          // Breadcrumbs trail
+        targetFrontier: null,
+      },
+
+      // Camera Controls (Zoom & Pan)
+      camera: {
+        x: 0,
+        y: 0,
+        zoom: 1.0,
+        isDragging: false,
+        dragStartX: 0,
+        dragStartY: 0,
+      },
+
+      // Mission parameters
+      alpha: 1.35,            // Safety margin
+      sensorRadius: 4,        // LiDAR coverage radius
+      obstacleDensity: 0.18,  // 18% obstacles
+      algorithm: 'budget_frontier', // 'budget_frontier' | 'nbv_utility' | 'greedy_frontier' | 'random_bounce'
+      
+      // Simulation Loop Management
+      isRunning: false,
+      speed: 15,              // Steps per second
+      timerId: null,
+      stepCount: 0,
+      totalStepsAccum: 0,
+
+      // Performance Metrics
+      expeditionsCount: 0,
+      strandedCount: 0,
+      activeFrontiers: [],
+
+      // UI View Toggles
+      showFog: true,
+      showFrontiers: true,
+      showPaths: true,
+    };
+
+    function generateLunarTerrain() {
+      const totalCells = GRID_SIZE * GRID_SIZE;
+      sim.worldGrid = new Uint8Array(totalCells);
+      sim.knownGrid = new Uint8Array(totalCells);
+      sim.worldGrid.fill(CELL_FREE);
+
+      BASE_POS = { x: Math.floor(GRID_SIZE / 2), y: Math.floor(GRID_SIZE / 2) };
+      document.getElementById('base-coords').textContent = `(${BASE_POS.x}, ${BASE_POS.y})`;
+
+      // Seed craters and boulder fields
+      const numCraters = Math.floor((totalCells * sim.obstacleDensity) / 6);
+      
+      for (let c = 0; c < numCraters; c++) {
+        const cx = Math.floor(Math.random() * GRID_SIZE);
+        const cy = Math.floor(Math.random() * GRID_SIZE);
+        const radius = 1 + Math.floor(Math.random() * 2.8);
+
+        // Keep landing zone clear around base station
+        const distToBase = Math.hypot(cx - BASE_POS.x, cy - BASE_POS.y);
+        if (distToBase < 4) continue;
+
+        for (let dy = -radius; dy <= radius; dy++) {
+          for (let dx = -radius; dx <= radius; dx++) {
+            if (dx * dx + dy * dy <= radius * radius + 0.5) {
+              const nx = cx + dx;
+              const ny = cy + dy;
+              if (nx >= 0 && nx < GRID_SIZE && ny >= 0 && ny < GRID_SIZE) {
+                if (Math.hypot(nx - BASE_POS.x, ny - BASE_POS.y) > 2.2) {
+                  sim.worldGrid[ny * GRID_SIZE + nx] = CELL_OBSTACLE;
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // Add sparse individual rocks
+      for (let i = 0; i < totalCells * 0.04; i++) {
+        const rx = Math.floor(Math.random() * GRID_SIZE);
+        const ry = Math.floor(Math.random() * GRID_SIZE);
+        if (Math.hypot(rx - BASE_POS.x, ry - BASE_POS.y) > 2.5) {
+          sim.worldGrid[ry * GRID_SIZE + rx] = CELL_OBSTACLE;
+        }
+      }
+
+      // Set base station
+      sim.worldGrid[BASE_POS.y * GRID_SIZE + BASE_POS.x] = CELL_BASE;
+
+      resetRoverState();
+    }
+
+    function resetRoverState() {
+      sim.knownGrid.fill(CELL_UNKNOWN);
+      
+      sim.rover.x = BASE_POS.x;
+      sim.rover.y = BASE_POS.y;
+      sim.rover.prevX = BASE_POS.x;
+      sim.rover.prevY = BASE_POS.y;
+      sim.rover.dirX = 0;
+      sim.rover.dirY = -1;
+      sim.rover.battery = sim.rover.maxBattery;
+      sim.rover.state = STATE_IDLE;
+      sim.rover.activePath = [];
+      sim.rover.plannedReturnPath = [];
+      sim.rover.history = [{ x: BASE_POS.x, y: BASE_POS.y }];
+      sim.rover.targetFrontier = null;
+
+      // Reveal landing zone around base
+      performLiDARScan(BASE_POS.x, BASE_POS.y);
+      detectFrontiers();
+      updatePlannedReturnPath();
+      updateMetricsAndInspector();
+      drawSimulationCanvas();
+    }
+
+    function performLiDARScan(cx, cy) {
+      const r = sim.sensorRadius;
+      let newlyRevealed = 0;
+
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (dx * dx + dy * dy <= r * r + 0.5) {
+            const nx = cx + dx;
+            const ny = cy + dy;
+            if (nx >= 0 && nx < GRID_SIZE && ny >= 0 && ny < GRID_SIZE) {
+              const idx = ny * GRID_SIZE + nx;
+              if (sim.knownGrid[idx] === CELL_UNKNOWN) {
+                sim.knownGrid[idx] = sim.worldGrid[idx];
+                newlyRevealed++;
+              }
+            }
+          }
+        }
+      }
+
+      sim.knownGrid[BASE_POS.y * GRID_SIZE + BASE_POS.x] = CELL_BASE;
+      return newlyRevealed;
+    }
+
+    function detectFrontiers() {
+      const frontiers = [];
+      const dirs = [
+        { dx: 1, dy: 0 }, { dx: -1, dy: 0 },
+        { dx: 0, dy: 1 }, { dx: 0, dy: -1 }
+      ];
+
+      for (let y = 1; y < GRID_SIZE - 1; y++) {
+        for (let x = 1; x < GRID_SIZE - 1; x++) {
+          const idx = y * GRID_SIZE + x;
+          const cell = sim.knownGrid[idx];
+
+          if (cell === CELL_FREE || cell === CELL_BASE) {
+            let hasUnknownNeighbor = false;
+            for (let d = 0; d < 4; d++) {
+              const nx = x + dirs[d].dx;
+              const ny = y + dirs[d].dy;
+              if (sim.knownGrid[ny * GRID_SIZE + nx] === CELL_UNKNOWN) {
+                hasUnknownNeighbor = true;
+                break;
+              }
+            }
+
+            if (hasUnknownNeighbor) {
+              frontiers.push({ x, y });
+            }
+          }
+        }
+      }
+
+      sim.activeFrontiers = frontiers;
+      return frontiers;
+    }
+
+    /* STREAMING_CHUNK:Computing constrained A* graph search */
+    function findAStarPath(startX, startY, goalX, goalY, allowUnexploredGoal = true) {
+      if (startX === goalX && startY === goalY) return [];
+
+      const openSet = [];
+      const cameFrom = new Map();
+      const gScore = new Float32Array(GRID_SIZE * GRID_SIZE).fill(Infinity);
+      const fScore = new Float32Array(GRID_SIZE * GRID_SIZE).fill(Infinity);
+      const inOpen = new Uint8Array(GRID_SIZE * GRID_SIZE);
+
+      const startIndex = startY * GRID_SIZE + startX;
+      gScore[startIndex] = 0;
+      fScore[startIndex] = Math.hypot(goalX - startX, goalY - startY);
+      openSet.push({ x: startX, y: startY, f: fScore[startIndex] });
+      inOpen[startIndex] = 1;
+
+      const dirs = [
+        { dx: 1, dy: 0 }, { dx: -1, dy: 0 },
+        { dx: 0, dy: 1 }, { dx: 0, dy: -1 }
+      ];
+
+      while (openSet.length > 0) {
+        let lowestIdx = 0;
+        for (let i = 1; i < openSet.length; i++) {
+          if (openSet[i].f < openSet[lowestIdx].f) {
+            lowestIdx = i;
+          }
+        }
+        const current = openSet.splice(lowestIdx, 1)[0];
+        const curIdx = current.y * GRID_SIZE + current.x;
+        inOpen[curIdx] = 0;
+
+        if (current.x === goalX && current.y === goalY) {
+          const path = [];
+          let currKey = curIdx;
+          while (cameFrom.has(currKey)) {
+            const px = currKey % GRID_SIZE;
+            const py = Math.floor(currKey / GRID_SIZE);
+            path.push({ x: px, y: py });
+            currKey = cameFrom.get(currKey);
+          }
+          path.reverse();
+          return path;
+        }
+
+        for (let i = 0; i < 4; i++) {
+          const nx = current.x + dirs[i].dx;
+          const ny = current.y + dirs[i].dy;
+
+          if (nx < 0 || nx >= GRID_SIZE || ny < 0 || ny >= GRID_SIZE) continue;
+
+          const nIdx = ny * GRID_SIZE + nx;
+          const knownCell = sim.knownGrid[nIdx];
+
+          const isTraversable = (knownCell === CELL_FREE || knownCell === CELL_BASE) ||
+                                (allowUnexploredGoal && nx === goalX && ny === goalY && knownCell !== CELL_OBSTACLE);
+
+          if (!isTraversable) continue;
+
+          const tentativeG = gScore[curIdx] + 1;
+          if (tentativeG < gScore[nIdx]) {
+            cameFrom.set(nIdx, curIdx);
+            gScore[nIdx] = tentativeG;
+            const h = Math.hypot(goalX - nx, goalY - ny);
+            fScore[nIdx] = tentativeG + h;
+
+            if (inOpen[nIdx] === 0) {
+              openSet.push({ x: nx, y: ny, f: fScore[nIdx] });
+              inOpen[nIdx] = 1;
+            }
+          }
+        }
+      }
+
+      return null;
+    }
+
+    function estimateInformationGain(x, y) {
+      let gain = 0;
+      const r = sim.sensorRadius;
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (dx * dx + dy * dy <= r * r + 0.5) {
+            const nx = x + dx;
+            const ny = y + dy;
+            if (nx >= 0 && nx < GRID_SIZE && ny >= 0 && ny < GRID_SIZE) {
+              if (sim.knownGrid[ny * GRID_SIZE + nx] === CELL_UNKNOWN) {
+                gain++;
+              }
+            }
+          }
+        }
+      }
+      return gain;
+    }
+
+    function selectNextFrontierGoal() {
+      const frontiers = detectFrontiers();
+      if (frontiers.length === 0) return null;
+
+      const rover = sim.rover;
+      let chosenTarget = null;
+      let bestScore = -Infinity;
+
+      // Sample candidates if active frontier count is large
+      const candidateList = frontiers.length > 60 
+        ? frontiers.filter((_, i) => i % Math.ceil(frontiers.length / 60) === 0)
+        : frontiers;
+
+      for (const f of candidateList) {
+        const pathToFrontier = findAStarPath(rover.x, rover.y, f.x, f.y, true);
+        if (!pathToFrontier) continue;
+        const costToFrontier = pathToFrontier.length;
+
+        const pathFrontierToBase = findAStarPath(f.x, f.y, BASE_POS.x, BASE_POS.y, false);
+        if (!pathFrontierToBase) continue;
+        const costFrontierToBase = pathFrontierToBase.length;
+
+        const totalBudgetNeeded = costToFrontier + (sim.alpha * costFrontierToBase);
+
+        /* 1. BUDGET-CONSTRAINED FRONTIER (Safe Standard) */
+        if (sim.algorithm === 'budget_frontier') {
+          if (totalBudgetNeeded <= rover.battery) {
+            const infoGain = estimateInformationGain(f.x, f.y);
+            const score = (infoGain * 1.5) - (costToFrontier * 1.0);
+            if (score > bestScore) {
+              bestScore = score;
+              chosenTarget = {
+                frontier: f,
+                path: pathToFrontier,
+                costOut: costToFrontier,
+                costBack: costFrontierToBase,
+                infoGain: infoGain,
+                totalBudget: totalBudgetNeeded
+              };
+            }
+          }
+        }
+
+        /* 2. NEXT-BEST-VIEW (NBV Utility) */
+        else if (sim.algorithm === 'nbv_utility') {
+          const infoGain = estimateInformationGain(f.x, f.y);
+          const batterySurplus = rover.battery - totalBudgetNeeded;
+          if (batterySurplus >= 0) {
+            const riskFactor = Math.exp(-batterySurplus / 25.0);
+            const utility = (infoGain * 2.0) / (costToFrontier + 1.0) - (riskFactor * 12.0);
+            if (utility > bestScore) {
+              bestScore = utility;
+              chosenTarget = {
+                frontier: f,
+                path: pathToFrontier,
+                costOut: costToFrontier,
+                costBack: costFrontierToBase,
+                infoGain: infoGain,
+                totalBudget: totalBudgetNeeded
+              };
+            }
+          }
+        }
+
+        /* 3. YAMAUCHI GREEDY FRONTIER */
+        else if (sim.algorithm === 'greedy_frontier') {
+          const score = -costToFrontier;
+          if (score > bestScore) {
+            bestScore = score;
+            chosenTarget = {
+              frontier: f,
+              path: pathToFrontier,
+              costOut: costToFrontier,
+              costBack: costFrontierToBase,
+              infoGain: estimateInformationGain(f.x, f.y),
+              totalBudget: totalBudgetNeeded
+            };
+          }
+        }
+
+        /* 4. RANDOM WALK BASELINE */
+        else if (sim.algorithm === 'random_bounce') {
+          const score = Math.random();
+          if (score > bestScore) {
+            bestScore = score;
+            chosenTarget = {
+              frontier: f,
+              path: pathToFrontier,
+              costOut: costToFrontier,
+              costBack: costFrontierToBase,
+              infoGain: estimateInformationGain(f.x, f.y),
+              totalBudget: totalBudgetNeeded
+            };
+          }
+        }
+      }
+
+      return chosenTarget;
+    }
+
+    function updatePlannedReturnPath() {
+      const rover = sim.rover;
+      if (rover.x === BASE_POS.x && rover.y === BASE_POS.y) {
+        rover.plannedReturnPath = [];
+        return;
+      }
+      const returnPath = findAStarPath(rover.x, rover.y, BASE_POS.x, BASE_POS.y, false);
+      rover.plannedReturnPath = returnPath || [];
+    }
+
+    function stepSimulation() {
+      const rover = sim.rover;
+      sim.stepCount++;
+      sim.totalStepsAccum++;
+
+      updatePlannedReturnPath();
+      const currentCostToBase = rover.plannedReturnPath.length;
+      const criticalReserve = Math.ceil(sim.alpha * currentCostToBase);
+
+      // Battery discharge
+      if (rover.state !== STATE_RECHARGING && rover.state !== STATE_STRANDED) {
+        rover.battery = Math.max(0, rover.battery - 1);
+        
+        // Stranded check
+        if (rover.battery <= 0 && !(rover.x === BASE_POS.x && rover.y === BASE_POS.y)) {
+          rover.state = STATE_STRANDED;
+          sim.strandedCount++;
+          addLogEntry(`ALERT: Rover ran out of battery at (${rover.x}, ${rover.y})! Mission failed.`, 'rose');
+          pauseSimulation();
+          showStrandedModal(true);
+          updateMetricsAndInspector();
+          drawSimulationCanvas();
+          updateChartData();
+          return;
+        }
+      }
+
+      // Finite State Machine
+      switch (rover.state) {
+        case STATE_IDLE:
+          rover.state = STATE_MAPPING;
+          addLogEntry('Base: Commencing SLAM frontier scan.', 'cyan');
+          break;
+
+        case STATE_MAPPING: {
+          if (rover.battery <= criticalReserve + 1) {
+            rover.state = STATE_HOMEBOUND;
+            addLogEntry(`Critical energy threshold reached (${rover.battery}u). Returning to base!`, 'amber');
+            break;
+          }
+
+          const decision = selectNextFrontierGoal();
+
+          if (decision && decision.path.length > 0) {
+            rover.targetFrontier = decision;
+            rover.activePath = [...decision.path];
+            rover.state = STATE_OUTWARD;
+            addLogEntry(`New Target: (${decision.frontier.x}, ${decision.frontier.y}) | Out Cost: ${decision.costOut}u | Gain: ${decision.infoGain} cells`, 'slate');
+          } else {
+            rover.state = STATE_HOMEBOUND;
+            if (sim.activeFrontiers.length === 0) {
+              addLogEntry('Exploration complete! 100% of reachable world mapped.', 'emerald');
+            } else {
+              addLogEntry('No safe frontier within battery limits. Returning for recharge.', 'amber');
+            }
+          }
+          break;
+        }
+
+        case STATE_OUTWARD: {
+          if (rover.battery <= criticalReserve) {
+            rover.state = STATE_HOMEBOUND;
+            rover.activePath = [];
+            addLogEntry(`Abort outward mission: Battery (${rover.battery}u) hit safety margin (${criticalReserve}u).`, 'amber');
+            break;
+          }
+
+          if (rover.activePath.length > 0) {
+            const nextCell = rover.activePath.shift();
+            rover.dirX = nextCell.x - rover.x;
+            rover.dirY = nextCell.y - rover.y;
+            rover.prevX = rover.x;
+            rover.prevY = rover.y;
+            rover.x = nextCell.x;
+            rover.y = nextCell.y;
+            rover.history.push({ x: rover.x, y: rover.y });
+
+            const revealed = performLiDARScan(rover.x, rover.y);
+            if (revealed > 4) {
+              detectFrontiers();
+            }
+
+            if (rover.activePath.length === 0) {
+              rover.state = STATE_MAPPING;
+            }
+          } else {
+            rover.state = STATE_MAPPING;
+          }
+          break;
+        }
+
+        case STATE_HOMEBOUND: {
+          if (rover.activePath.length === 0) {
+            const homePath = findAStarPath(rover.x, rover.y, BASE_POS.x, BASE_POS.y, false);
+            if (homePath && homePath.length > 0) {
+              rover.activePath = homePath;
+            } else if (rover.x === BASE_POS.x && rover.y === BASE_POS.y) {
+              rover.state = STATE_RECHARGING;
+              sim.expeditionsCount++;
+              addLogEntry(`Rover docked at base! Battery remaining: ${rover.battery}u.`, 'emerald');
+              break;
+            }
+          }
+
+          if (rover.activePath.length > 0) {
+            const nextCell = rover.activePath.shift();
+            rover.dirX = nextCell.x - rover.x;
+            rover.dirY = nextCell.y - rover.y;
+            rover.x = nextCell.x;
+            rover.y = nextCell.y;
+            rover.history.push({ x: rover.x, y: rover.y });
+            performLiDARScan(rover.x, rover.y);
+
+            if (rover.x === BASE_POS.x && rover.y === BASE_POS.y) {
+              rover.state = STATE_RECHARGING;
+              sim.expeditionsCount++;
+              addLogEntry(`Expedition #${sim.expeditionsCount} completed. Recharging power cells...`, 'emerald');
+            }
+          }
+          break;
+        }
+
+        case STATE_RECHARGING: {
+          rover.battery = Math.min(rover.maxBattery, rover.battery + 8);
+          if (rover.battery >= rover.maxBattery) {
+            rover.state = STATE_IDLE;
+            rover.history = [{ x: BASE_POS.x, y: BASE_POS.y }];
+            addLogEntry('Battery 100% recharged. Ready for next mission departure!', 'cyan');
+          }
+          break;
+        }
+
+        case STATE_STRANDED:
+          break;
+      }
+
+      updatePlannedReturnPath();
+      updateMetricsAndInspector();
+      drawSimulationCanvas();
+      
+      if (sim.stepCount % 2 === 0) {
+        updateChartData();
+      }
+    }
+
+    const canvas = document.getElementById('lunar-canvas');
+    const ctx = canvas.getContext('2d');
+    const canvasWrapper = document.getElementById('canvas-wrapper');
+
+    function resizeCanvas() {
+      const rect = canvasWrapper.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = Math.floor(rect.width * dpr);
+      canvas.height = Math.floor(rect.height * dpr);
+      ctx.setTransform(1, 0, 0, 1, 0, 0); // reset transform
+      ctx.scale(dpr, dpr);
+      drawSimulationCanvas();
+    }
+
+    function drawSimulationCanvas() {
+      const rect = canvasWrapper.getBoundingClientRect();
+      const w = rect.width;
+      const h = rect.height;
+      const cellSize = w / GRID_SIZE;
+
+      ctx.save();
+      ctx.clearRect(0, 0, w, h);
+
+      // Camera Transform: Zoom & Pan
+      ctx.translate(w / 2 + sim.camera.x, h / 2 + sim.camera.y);
+      ctx.scale(sim.camera.zoom, sim.camera.zoom);
+      ctx.translate(-w / 2, -h / 2);
+
+      // 1. Draw Grid Cells & Fog
+      for (let y = 0; y < GRID_SIZE; y++) {
+        for (let x = 0; x < GRID_SIZE; x++) {
+          const idx = y * GRID_SIZE + x;
+          const known = sim.knownGrid[idx];
+          const px = x * cellSize;
+          const py = y * cellSize;
+
+          if (sim.showFog && known === CELL_UNKNOWN) {
+            ctx.fillStyle = '#06090e';
+            ctx.fillRect(px, py, cellSize + 0.3, cellSize + 0.3);
+            if ((x + y) % 5 === 0) {
+              ctx.fillStyle = '#0f172a';
+              ctx.fillRect(px + cellSize * 0.4, py + cellSize * 0.4, 1.2, 1.2);
+            }
+          } else {
+            const truth = sim.worldGrid[idx];
+            if (truth === CELL_OBSTACLE) {
+              ctx.fillStyle = '#334155';
+              ctx.fillRect(px, py, cellSize + 0.3, cellSize + 0.3);
+              ctx.fillStyle = '#1e293b';
+              ctx.fillRect(px + 1, py + 1, cellSize - 2, cellSize - 2);
+            } else {
+              ctx.fillStyle = '#111827';
+              ctx.fillRect(px, py, cellSize + 0.3, cellSize + 0.3);
+            }
+          }
+
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.025)';
+          ctx.strokeRect(px, py, cellSize, cellSize);
+        }
+      }
+
+      // 2. Draw Frontiers
+      if (sim.showFrontiers && sim.activeFrontiers.length > 0) {
+        ctx.fillStyle = '#c084fc';
+        for (const f of sim.activeFrontiers) {
+          const fx = f.x * cellSize + cellSize / 2;
+          const fy = f.y * cellSize + cellSize / 2;
+          ctx.beginPath();
+          ctx.arc(fx, fy, Math.max(1.8, cellSize * 0.35), 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      // 3. Draw Breadcrumbs History
+      if (sim.rover.history.length > 1) {
+        ctx.strokeStyle = 'rgba(0, 240, 255, 0.22)';
+        ctx.lineWidth = Math.max(1, cellSize * 0.22);
+        ctx.beginPath();
+        for (let i = 0; i < sim.rover.history.length; i++) {
+          const pt = sim.rover.history[i];
+          const px = pt.x * cellSize + cellSize / 2;
+          const py = pt.y * cellSize + cellSize / 2;
+          if (i === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.stroke();
+      }
+
+      // 4. Draw Planned Routes
+      if (sim.showPaths) {
+        // Active Exploration Path (Cyan Solid Line)
+        if (sim.rover.activePath.length > 0) {
+          ctx.strokeStyle = '#00f0ff';
+          ctx.lineWidth = Math.max(1.5, cellSize * 0.3);
+          ctx.setLineDash([4, 2]);
+          ctx.beginPath();
+          ctx.moveTo(sim.rover.x * cellSize + cellSize / 2, sim.rover.y * cellSize + cellSize / 2);
+          for (const pt of sim.rover.activePath) {
+            ctx.lineTo(pt.x * cellSize + cellSize / 2, pt.y * cellSize + cellSize / 2);
+          }
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+
+        // Return Corridor (Amber Dotted Line)
+        if (sim.rover.plannedReturnPath.length > 0 && sim.rover.state !== STATE_RECHARGING) {
+          ctx.strokeStyle = '#f59e0b';
+          ctx.lineWidth = Math.max(1.2, cellSize * 0.25);
+          ctx.setLineDash([2, 4]);
+          ctx.beginPath();
+          ctx.moveTo(sim.rover.x * cellSize + cellSize / 2, sim.rover.y * cellSize + cellSize / 2);
+          for (const pt of sim.rover.plannedReturnPath) {
+            ctx.lineTo(pt.x * cellSize + cellSize / 2, pt.y * cellSize + cellSize / 2);
+          }
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+      }
+
+      // 5. Draw Lunar Base Lander
+      const baseX = BASE_POS.x * cellSize + cellSize / 2;
+      const baseY = BASE_POS.y * cellSize + cellSize / 2;
+
+      ctx.strokeStyle = 'rgba(0, 240, 255, 0.4)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(baseX, baseY, cellSize * 2.2, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.fillStyle = '#0284c7';
+      ctx.fillRect(BASE_POS.x * cellSize - 1, BASE_POS.y * cellSize - 1, cellSize + 2, cellSize + 2);
+      ctx.fillStyle = '#38bdf8';
+      ctx.fillRect(BASE_POS.x * cellSize + 2, BASE_POS.y * cellSize + 2, cellSize - 4, cellSize - 4);
+
+      // 6. Draw Rover Entity & LiDAR
+      const roverX = sim.rover.x * cellSize + cellSize / 2;
+      const roverY = sim.rover.y * cellSize + cellSize / 2;
+
+      ctx.strokeStyle = 'rgba(0, 240, 255, 0.2)';
+      ctx.lineWidth = 1;
+      ctx.fillStyle = 'rgba(0, 240, 255, 0.03)';
+      ctx.beginPath();
+      ctx.arc(roverX, roverY, sim.sensorRadius * cellSize, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.save();
+      ctx.translate(roverX, roverY);
+      
+      ctx.shadowColor = sim.rover.state === STATE_STRANDED ? '#f43f5e' : '#10b981';
+      ctx.shadowBlur = 10;
+
+      ctx.fillStyle = sim.rover.state === STATE_STRANDED ? '#f43f5e' : '#10b981';
+      ctx.beginPath();
+      ctx.arc(0, 0, Math.max(3, cellSize * 0.6), 0, Math.PI * 2);
+      ctx.fill();
+
+      const angle = Math.atan2(sim.rover.dirY, sim.rover.dirX);
+      ctx.rotate(angle);
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.moveTo(cellSize * 0.7, 0);
+      ctx.lineTo(0, -cellSize * 0.3);
+      ctx.lineTo(0, cellSize * 0.3);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.restore();
+      ctx.restore();
+    }
+
+    function setZoom(factor) {
+      sim.camera.zoom = Math.max(0.6, Math.min(4.5, factor));
+      document.getElementById('zoom-level-text').textContent = `${Math.round(sim.camera.zoom * 100)}%`;
+      drawSimulationCanvas();
+    }
+
+    function resetCamera() {
+      sim.camera.zoom = 1.0;
+      sim.camera.x = 0;
+      sim.camera.y = 0;
+      document.getElementById('zoom-level-text').textContent = '100%';
+      drawSimulationCanvas();
+    }
+
+    // Canvas dragging & pan
+    canvasWrapper.addEventListener('mousedown', (e) => {
+      sim.camera.isDragging = true;
+      sim.camera.dragStartX = e.clientX - sim.camera.x;
+      sim.camera.dragStartY = e.clientY - sim.camera.y;
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!sim.camera.isDragging) return;
+      sim.camera.x = e.clientX - sim.camera.dragStartX;
+      sim.camera.y = e.clientY - sim.camera.dragStartY;
+      drawSimulationCanvas();
+    });
+
+    window.addEventListener('mouseup', () => {
+      sim.camera.isDragging = false;
+    });
+
+    // Mouse wheel zoom
+    canvasWrapper.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const zoomDelta = e.deltaY < 0 ? 1.15 : 0.87;
+      setZoom(sim.camera.zoom * zoomDelta);
+    }, { passive: false });
+
+    // Touch dragging & pan for mobile
+    canvasWrapper.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 1) {
+        sim.camera.isDragging = true;
+        sim.camera.dragStartX = e.touches[0].clientX - sim.camera.x;
+        sim.camera.dragStartY = e.touches[0].clientY - sim.camera.y;
+      }
+    }, { passive: true });
+
+    canvasWrapper.addEventListener('touchmove', (e) => {
+      if (!sim.camera.isDragging || e.touches.length !== 1) return;
+      sim.camera.x = e.touches[0].clientX - sim.camera.dragStartX;
+      sim.camera.y = e.touches[0].clientY - sim.camera.dragStartY;
+      drawSimulationCanvas();
+    }, { passive: true });
+
+    canvasWrapper.addEventListener('touchend', () => {
+      sim.camera.isDragging = false;
+    });
+
+    // Zoom Buttons
+    document.getElementById('btn-zoom-in').addEventListener('click', () => setZoom(sim.camera.zoom * 1.25));
+    document.getElementById('btn-zoom-out').addEventListener('click', () => setZoom(sim.camera.zoom / 1.25));
+    document.getElementById('btn-zoom-reset').addEventListener('click', resetCamera);
+
+    let telemetryChart = null;
+    const maxChartPoints = 40;
+    const chartLabels = [];
+    const coverageHistory = [];
+    const batteryHistory = [];
+
+    function initTelemetryChart() {
+      const ctxChart = document.getElementById('chart-telemetry').getContext('2d');
+      telemetryChart = new Chart(ctxChart, {
+        type: 'line',
+        data: {
+          labels: chartLabels,
+          datasets: [
+            {
+              label: '% Mapped',
+              data: coverageHistory,
+              borderColor: '#00f0ff',
+              backgroundColor: 'rgba(0, 240, 255, 0.1)',
+              borderWidth: 2,
+              tension: 0.3,
+              pointRadius: 0,
+              yAxisID: 'y'
+            },
+            {
+              label: '% Battery',
+              data: batteryHistory,
+              borderColor: '#10b981',
+              backgroundColor: 'rgba(16, 185, 129, 0.1)',
+              borderWidth: 2,
+              tension: 0.2,
+              pointRadius: 0,
+              yAxisID: 'y'
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: false,
+          scales: {
+            x: { display: false },
+            y: {
+              min: 0,
+              max: 100,
+              grid: { color: 'rgba(255, 255, 255, 0.05)' },
+              ticks: { color: '#64748b', font: { family: 'JetBrains Mono', size: 10 } }
+            }
+          },
+          plugins: {
+            legend: {
+              position: 'top',
+              labels: {
+                color: '#94a3b8',
+                font: { family: 'JetBrains Mono', size: 10 },
+                boxWidth: 10
+              }
+            }
+          }
+        }
+      });
+    }
+
+    function updateChartData() {
+      if (!telemetryChart) return;
+
+      const totalExploreable = GRID_SIZE * GRID_SIZE;
+      let mapped = 0;
+      for (let i = 0; i < totalExploreable; i++) {
+        if (sim.knownGrid[i] !== CELL_UNKNOWN) mapped++;
+      }
+      const covPct = ((mapped / totalExploreable) * 100).toFixed(1);
+      const batPct = ((sim.rover.battery / sim.rover.maxBattery) * 100).toFixed(1);
+
+      chartLabels.push(sim.stepCount);
+      coverageHistory.push(covPct);
+      batteryHistory.push(batPct);
+
+      if (chartLabels.length > maxChartPoints) {
+        chartLabels.shift();
+        coverageHistory.shift();
+        batteryHistory.shift();
+      }
+
+      telemetryChart.update();
+    }
+
+    function updateMetricsAndInspector() {
+      const rover = sim.rover;
+
+      // Status Badge
+      const stateBadge = document.getElementById('rover-state-badge');
+      stateBadge.textContent = rover.state;
+      stateBadge.className = 'px-2 py-0.5 rounded text-[11px] font-bold border transition-colors';
+      
+      switch (rover.state) {
+        case STATE_IDLE:
+          stateBadge.classList.add('bg-slate-500/20', 'text-slate-300', 'border-slate-500/40');
+          break;
+        case STATE_MAPPING:
+        case STATE_OUTWARD:
+          stateBadge.classList.add('bg-cyan-500/20', 'text-cyan-400', 'border-cyan-500/40', 'animate-pulse');
+          break;
+        case STATE_HOMEBOUND:
+          stateBadge.classList.add('bg-amber-500/20', 'text-amber-400', 'border-amber-500/40', 'animate-pulse');
+          break;
+        case STATE_RECHARGING:
+          stateBadge.classList.add('bg-emerald-500/20', 'text-emerald-400', 'border-emerald-500/40');
+          break;
+        case STATE_STRANDED:
+          stateBadge.classList.add('bg-rose-500/20', 'text-rose-400', 'border-rose-500/40');
+          break;
+      }
+
+      const batPct = Math.round((rover.battery / rover.maxBattery) * 100);
+      document.getElementById('quick-bat-text').textContent = `${batPct}% (${rover.battery}u)`;
+      const batBar = document.getElementById('quick-bat-bar');
+      batBar.style.width = `${batPct}%`;
+      batBar.className = `h-full transition-all duration-200 ${
+        batPct > 45 ? 'bg-emerald-500' : batPct > 20 ? 'bg-amber-500' : 'bg-rose-500'
+      }`;
+
+      document.getElementById('rover-coords').textContent = `(${rover.x}, ${rover.y})`;
+      document.getElementById('step-counter').textContent = `Step: ${sim.stepCount}`;
+
+      let mapped = 0;
+      for (let i = 0; i < GRID_SIZE * GRID_SIZE; i++) {
+        if (sim.knownGrid[i] !== CELL_UNKNOWN) mapped++;
+      }
+      const covPct = ((mapped / (GRID_SIZE * GRID_SIZE)) * 100).toFixed(1);
+      document.getElementById('quick-map-pct').textContent = `${covPct}%`;
+      document.getElementById('metric-mapped-cells').textContent = `${mapped} cel (${covPct}%)`;
+
+      document.getElementById('metric-expeditions').textContent = sim.expeditionsCount;
+      document.getElementById('metric-stranded').textContent = sim.strandedCount;
+      document.getElementById('metric-total-steps').textContent = sim.totalStepsAccum;
+
+      const target = rover.targetFrontier;
+      const inspectorTarget = document.getElementById('inspector-target');
+      const inspectorGain = document.getElementById('inspector-gain');
+      const costOutElem = document.getElementById('inspector-cost-out');
+      const costBackElem = document.getElementById('inspector-cost-back');
+      const eqCostTotal = document.getElementById('eq-cost-total');
+      const eqBatteryCur = document.getElementById('eq-battery-cur');
+      const eqReserveReq = document.getElementById('eq-reserve-req');
+      const budgetStatusTag = document.getElementById('budget-status-tag');
+
+      const distToBase = rover.plannedReturnPath.length;
+      const reserveBudget = Math.ceil(sim.alpha * distToBase);
+      eqReserveReq.textContent = `${reserveBudget} u (${sim.alpha}x × ${distToBase})`;
+      eqBatteryCur.textContent = `${rover.battery} u`;
+
+      if (target && rover.state === STATE_OUTWARD) {
+        inspectorTarget.textContent = `(${target.frontier.x}, ${target.frontier.y})`;
+        inspectorGain.textContent = `Estimated Info Gain: ~${target.infoGain} cells`;
+        costOutElem.textContent = `${target.costOut} u`;
+        costBackElem.textContent = `${target.costBack} u`;
+        eqCostTotal.textContent = `${target.totalBudget} u`;
+
+        if (target.totalBudget <= rover.battery) {
+          budgetStatusTag.textContent = 'FEASIBLE';
+          budgetStatusTag.className = 'text-[9px] px-1 py-0.2 rounded font-bold bg-emerald-500/20 text-emerald-400';
+        } else {
+          budgetStatusTag.textContent = 'RISK EXCEEDED';
+          budgetStatusTag.className = 'text-[9px] px-1 py-0.2 rounded font-bold bg-rose-500/20 text-rose-400';
+        }
+      } else {
+        inspectorTarget.textContent = rover.state === STATE_HOMEBOUND ? 'RETURNING TO BASE' : '--';
+        inspectorGain.textContent = rover.state === STATE_HOMEBOUND ? 'System Preservation' : 'Awaiting decision';
+        costOutElem.textContent = '0 u';
+        costBackElem.textContent = `${distToBase} u`;
+        eqCostTotal.textContent = `${reserveBudget} u`;
+        budgetStatusTag.textContent = rover.battery >= reserveBudget ? 'SAFE' : 'CRITICAL';
+        budgetStatusTag.className = rover.battery >= reserveBudget
+          ? 'text-[9px] px-1 py-0.2 rounded font-bold bg-emerald-500/20 text-emerald-400'
+          : 'text-[9px] px-1 py-0.2 rounded font-bold bg-amber-500/20 text-amber-400';
+      }
+    }
+
+    function addLogEntry(text, color = 'slate') {
+      const logContainer = document.getElementById('event-log');
+      const timeStr = new Date().toTimeString().split(' ')[0];
+      const div = document.createElement('div');
+      
+      const colors = {
+        cyan: 'text-cyan-400',
+        emerald: 'text-emerald-400',
+        amber: 'text-amber-400',
+        rose: 'text-rose-400 font-bold',
+        slate: 'text-slate-400',
+      };
+
+      div.className = `${colors[color] || 'text-slate-300'} transition-opacity`;
+      div.textContent = `[${timeStr}] ${text}`;
+      logContainer.prepend(div);
+
+      if (logContainer.children.length > 50) {
+        logContainer.removeChild(logContainer.lastChild);
+      }
+    }
+
+    function showStrandedModal(show) {
+      const modal = document.getElementById('stranded-overlay');
+      if (show) {
+        modal.classList.remove('opacity-0', 'pointer-events-none');
+        modal.classList.add('opacity-100');
+      } else {
+        modal.classList.add('opacity-0', 'pointer-events-none');
+        modal.classList.remove('opacity-100');
+      }
+    }
+
+    function startSimulation() {
+      if (sim.isRunning) return;
+      if (sim.rover.state === STATE_STRANDED) return;
+
+      sim.isRunning = true;
+      document.getElementById('play-text').textContent = 'PAUSE';
+      document.getElementById('play-icon').innerHTML = '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>';
+      
+      const intervalMs = 1000 / sim.speed;
+      sim.timerId = setInterval(() => {
+        stepSimulation();
+      }, intervalMs);
+    }
+
+    function pauseSimulation() {
+      if (!sim.isRunning) return;
+      sim.isRunning = false;
+      clearInterval(sim.timerId);
+      sim.timerId = null;
+      document.getElementById('play-text').textContent = 'RESUME';
+      document.getElementById('play-icon').innerHTML = '<path d="M8 5v14l11-7z"/>';
+    }
+
+    function togglePlay() {
+      if (sim.isRunning) pauseSimulation();
+      else startSimulation();
+    }
+
+    window.addEventListener('load', () => {
+      initTelemetryChart();
+      generateLunarTerrain();
+      resizeCanvas();
+
+      // Play / Pause Button
+      document.getElementById('btn-play').addEventListener('click', togglePlay);
+
+      // Step Button
+      document.getElementById('btn-step').addEventListener('click', () => {
+        pauseSimulation();
+        stepSimulation();
+      });
+
+      // Reset Rover Button
+      document.getElementById('btn-reset-expedition').addEventListener('click', () => {
+        pauseSimulation();
+        showStrandedModal(false);
+        resetRoverState();
+        addLogEntry('Rover reset at lunar base. Systems calibrated.', 'cyan');
+      });
+
+      // Regenerate Map Button
+      document.getElementById('btn-new-map').addEventListener('click', () => {
+        pauseSimulation();
+        showStrandedModal(false);
+        sim.stepCount = 0;
+        coverageHistory.length = 0;
+        batteryHistory.length = 0;
+        chartLabels.length = 0;
+        generateLunarTerrain();
+        resetCamera();
+        addLogEntry('Procedurally generated new lunar topography map.', 'cyan');
+      });
+
+      // Rescue Button
+      document.getElementById('btn-rescue').addEventListener('click', () => {
+        showStrandedModal(false);
+        resetRoverState();
+        addLogEntry('Rescue mission completed. Rover restored at base.', 'emerald');
+      });
+
+      // World Size Selector Buttons
+      document.querySelectorAll('.btn-world-size').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const newSize = parseInt(e.target.dataset.size, 10);
+          if (newSize === GRID_SIZE) return;
+
+          GRID_SIZE = newSize;
+          document.getElementById('world-size-label').textContent = `${GRID_SIZE} × ${GRID_SIZE}`;
+
+          document.querySelectorAll('.btn-world-size').forEach(b => {
+            b.className = 'btn-world-size py-1 text-[11px] font-mono rounded border border-lunar-700 bg-lunar-850 hover:border-cyan-500 text-slate-300';
+          });
+          e.target.className = 'btn-world-size py-1 text-[11px] font-mono rounded border border-cyan-500 bg-cyan-950/40 text-cyan-300 font-bold';
+
+          pauseSimulation();
+          showStrandedModal(false);
+          sim.stepCount = 0;
+          coverageHistory.length = 0;
+          batteryHistory.length = 0;
+          chartLabels.length = 0;
+          generateLunarTerrain();
+          resetCamera();
+          addLogEntry(`World dimensions reconfigured to ${GRID_SIZE}×${GRID_SIZE} grid.`, 'violet');
+        });
+      });
+
+      // Speed Slider
+      const speedSlider = document.getElementById('slider-speed');
+      const speedLabel = document.getElementById('speed-label');
+      speedSlider.addEventListener('input', (e) => {
+        sim.speed = parseInt(e.target.value, 10);
+        speedLabel.textContent = `${sim.speed} steps/s`;
+        if (sim.isRunning) {
+          pauseSimulation();
+          startSimulation();
+        }
+      });
+
+      // Algorithm Selector Radio Buttons
+      document.querySelectorAll('input[name="algorithm"]').forEach(radio => {
+        radio.addEventListener('change', (e) => {
+          sim.algorithm = e.target.value;
+          document.querySelectorAll('.alg-option').forEach(opt => {
+            opt.classList.remove('border-cyan-500/60', 'bg-cyan-950/25');
+            opt.classList.add('border-lunar-700', 'bg-lunar-850');
+          });
+          e.target.closest('.alg-option').classList.add('border-cyan-500/60', 'bg-cyan-950/25');
+          addLogEntry(`Strategy switched to: ${e.target.value.toUpperCase()}`, 'violet');
+        });
+      });
+
+      // Algorithm Documentation Modal Handlers
+      const docModal = document.getElementById('alg-doc-modal');
+      const openDocModal = (algKey) => {
+        docModal.classList.remove('opacity-0', 'pointer-events-none');
+        docModal.classList.add('opacity-100');
+        switchModalTab(algKey || sim.algorithm);
+      };
+
+      const closeDocModal = () => {
+        docModal.classList.add('opacity-0', 'pointer-events-none');
+        docModal.classList.remove('opacity-100');
+      };
+
+      document.querySelectorAll('.btn-open-doc').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          openDocModal(btn.dataset.alg);
+        });
+      });
+
+      document.getElementById('btn-close-modal').addEventListener('click', closeDocModal);
+      document.getElementById('btn-close-modal-footer').addEventListener('click', closeDocModal);
+
+      // Close modal on outside backdrop click
+      docModal.addEventListener('click', (e) => {
+        if (e.target === docModal) closeDocModal();
+      });
+
+      // Modal Tab Switching
+      function switchModalTab(tabKey) {
+        document.querySelectorAll('.modal-tab-btn').forEach(btn => {
+          if (btn.dataset.tab === tabKey) {
+            btn.className = 'modal-tab-btn py-2.5 px-3 text-xs font-mono border-b-2 border-cyan-400 text-cyan-400 font-bold whitespace-nowrap';
+          } else {
+            btn.className = 'modal-tab-btn py-2.5 px-3 text-xs font-mono border-b-2 border-transparent text-slate-400 hover:text-slate-200 whitespace-nowrap';
+          }
+        });
+
+        document.querySelectorAll('.modal-tab-panel').forEach(panel => {
+          panel.classList.add('hidden');
+        });
+
+        const activePanel = document.getElementById(`tab-content-${tabKey}`);
+        if (activePanel) activePanel.classList.remove('hidden');
+      }
+
+      document.querySelectorAll('.modal-tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => switchModalTab(btn.dataset.tab));
+      });
+
+      // Alpha Safety Margin Slider
+      const alphaSlider = document.getElementById('slider-alpha');
+      const alphaLabel = document.getElementById('val-alpha');
+      alphaSlider.addEventListener('input', (e) => {
+        sim.alpha = parseFloat(e.target.value);
+        alphaLabel.textContent = `${sim.alpha.toFixed(2)}x`;
+        updateMetricsAndInspector();
+      });
+
+      // Battery Slider
+      const batSlider = document.getElementById('slider-battery');
+      const batLabel = document.getElementById('val-battery');
+      batSlider.addEventListener('input', (e) => {
+        const val = parseInt(e.target.value, 10);
+        sim.rover.maxBattery = val;
+        sim.rover.battery = Math.min(sim.rover.battery, val);
+        batLabel.textContent = `${val} u`;
+        updateMetricsAndInspector();
+      });
+
+      // LiDAR Sensor Slider
+      const sensorSlider = document.getElementById('slider-sensor');
+      const sensorLabel = document.getElementById('val-sensor');
+      sensorSlider.addEventListener('input', (e) => {
+        sim.sensorRadius = parseInt(e.target.value, 10);
+        sensorLabel.textContent = `${sim.sensorRadius} cells`;
+        performLiDARScan(sim.rover.x, sim.rover.y);
+        detectFrontiers();
+        drawSimulationCanvas();
+      });
+
+      // Obstacle Density Slider
+      const obsSlider = document.getElementById('slider-obstacles');
+      const obsLabel = document.getElementById('val-obstacles');
+      obsSlider.addEventListener('input', (e) => {
+        sim.obstacleDensity = parseInt(e.target.value, 10) / 100;
+        obsLabel.textContent = `${e.target.value}%`;
+      });
+
+      // Display Layer Checkboxes
+      document.getElementById('chk-fog').addEventListener('change', (e) => {
+        sim.showFog = e.target.checked;
+        drawSimulationCanvas();
+      });
+      document.getElementById('chk-frontiers').addEventListener('change', (e) => {
+        sim.showFrontiers = e.target.checked;
+        drawSimulationCanvas();
+      });
+      document.getElementById('chk-paths').addEventListener('change', (e) => {
+        sim.showPaths = e.target.checked;
+        drawSimulationCanvas();
+      });
+
+      // Clear Log Button
+      document.getElementById('btn-clear-log').addEventListener('click', () => {
+        document.getElementById('event-log').innerHTML = '';
+      });
+
+      window.addEventListener('resize', resizeCanvas);
+    });
+  </script>
+</body>
+</html>
