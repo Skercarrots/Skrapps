@@ -1,1 +1,690 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Seamless Instagram Carousel Splitter</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- JSZip for client-side .zip generation -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <style>
+    /* Custom scrollbars and canvas styling */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0f172a;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #475569;
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 h-screen flex flex-col overflow-hidden select-none font-sans">
 
+  <!-- Top Navigation Bar -->
+  <header class="h-16 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-6 z-20 flex-shrink-0">
+    <div class="flex items-center gap-3">
+      <div class="w-9 h-9 rounded-lg bg-gradient-to-tr from-amber-500 via-rose-500 to-purple-600 flex items-center justify-center shadow-lg shadow-rose-500/20">
+        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <rect x="2" y="2" width="20" height="20" rx="5" ry="5" stroke-width="2"></rect>
+          <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" stroke-width="2"></path>
+          <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" stroke-width="2"></line>
+        </svg>
+      </div>
+      <div>
+        <h1 class="text-sm font-bold tracking-wide text-white uppercase flex items-center gap-2">
+          Instagram Carousel Splitter
+        </h1>
+        <p class="text-xs text-slate-400">Zero-seam portrait panorama generator (1080×1350)</p>
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="flex items-center gap-3">
+      <button id="btnSample" class="text-xs px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg border border-slate-700 transition">
+        Try Sample Image
+      </button>
+
+      <label class="cursor-pointer text-xs font-semibold px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg shadow-sm shadow-indigo-600/30 transition flex items-center gap-2">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
+        </svg>
+        Upload Image
+        <input type="file" id="fileInput" accept="image/*" class="hidden" />
+      </label>
+
+      <button id="btnDownloadZip" disabled class="cursor-not-allowed opacity-50 text-xs font-semibold px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg shadow-sm shadow-emerald-600/30 transition flex items-center gap-2">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+        </svg>
+        Download All (.ZIP)
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Workspace -->
+  <div class="flex-1 flex overflow-hidden">
+    
+    <!-- Left/Center: Interactive Canvas Editor -->
+    <main class="flex-1 relative bg-slate-950 flex items-center justify-center p-4 overflow-hidden">
+      <canvas id="cropCanvas" class="max-w-full max-h-full rounded shadow-2xl transition-all duration-75"></canvas>
+      
+      <!-- Empty Placeholder -->
+      <div id="dropPrompt" class="absolute inset-0 flex flex-col items-center justify-center text-center p-6 pointer-events-none">
+        <div class="w-20 h-20 rounded-2xl bg-slate-900/80 border border-slate-800 flex items-center justify-center text-slate-500 mb-4 shadow-xl backdrop-blur">
+          <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+          </svg>
+        </div>
+        <h3 class="text-base font-semibold text-slate-300 mb-1">No Image Loaded</h3>
+        <p class="text-xs text-slate-500 max-w-sm">Upload any high-resolution panorama, photo, or render to crop and split it into perfectly aligned seamless panels.</p>
+      </div>
+    </main>
+
+    <!-- Right Sidebar Controls & Real-Time Previews -->
+    <aside class="w-80 bg-slate-900 border-l border-slate-800 flex flex-col z-10 flex-shrink-0">
+      
+      <!-- Configurations -->
+      <div class="p-5 border-b border-slate-800 space-y-5">
+        <div>
+          <label class="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-2">Split Mode</label>
+          <div class="grid grid-cols-2 gap-2">
+            <button id="btnMode2" class="py-2.5 px-3 rounded-lg border border-slate-700 bg-slate-800 text-xs font-medium hover:border-slate-600 transition flex items-center justify-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-slate-500" id="dotMode2"></span>
+              1×2 (2 Slides)
+            </button>
+            <button id="btnMode3" class="py-2.5 px-3 rounded-lg border border-indigo-500 bg-indigo-500/10 text-indigo-300 text-xs font-medium transition flex items-center justify-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-indigo-400" id="dotMode3"></span>
+              1×3 (3 Slides)
+            </button>
+          </div>
+        </div>
+
+        <!-- Scale Slider -->
+        <div>
+          <div class="flex justify-between items-center mb-1">
+            <label class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Crop Size</label>
+            <span id="scaleDisplay" class="text-xs text-slate-500 font-mono">100%</span>
+          </div>
+          <input type="range" id="scaleSlider" min="20" max="100" value="100" class="w-full accent-indigo-500 bg-slate-800 h-1.5 rounded cursor-pointer" />
+          <p class="text-[11px] text-slate-500 mt-1">You can also drag corner handles directly on the image.</p>
+        </div>
+
+        <!-- Guides Toggle (Checked by default) -->
+        <div class="flex items-center justify-between pt-1">
+          <span class="text-xs font-medium text-slate-300">Show Seam Guides</span>
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" id="chkGuides" class="sr-only peer" checked />
+            <div class="w-9 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+          </label>
+        </div>
+      </div>
+
+      <!-- Live Split Previews -->
+      <div class="flex-1 overflow-y-auto p-5">
+        <div class="flex items-center justify-between mb-3">
+          <label class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Live Slices</label>
+          <span class="text-[11px] text-slate-500 font-mono">1080×1350 px</span>
+        </div>
+        <div id="previewList" class="space-y-4">
+          <p class="text-xs text-slate-600 text-center py-8">Load an image to preview slices.</p>
+        </div>
+      </div>
+
+    </aside>
+  </div>
+
+  <script>
+    // --- Application State ---
+    const state = {
+      image: null,
+      fileName: 'carousel',
+      slices: 3,             // 2 or 3
+      showGuides: true,       // Mark seams by default
+      cropBox: { x: 0, y: 0, w: 0, h: 0 },
+      display: { x: 0, y: 0, w: 0, h: 0, scale: 1 },
+      interaction: {
+        mode: null,          // 'move', 'nw', 'ne', 'sw', 'se'
+        startX: 0,
+        startY: 0,
+        boxOrigin: { x: 0, y: 0, w: 0, h: 0 }
+      }
+    };
+
+    const HANDLE_SIZE = 12; // Visual size for grab handles
+
+    // --- DOM References ---
+    const canvas = document.getElementById('cropCanvas');
+    const ctx = canvas.getContext('2d');
+    const dropPrompt = document.getElementById('dropPrompt');
+    const fileInput = document.getElementById('fileInput');
+    const scaleSlider = document.getElementById('scaleSlider');
+    const scaleDisplay = document.getElementById('scaleDisplay');
+    const chkGuides = document.getElementById('chkGuides');
+    const btnMode2 = document.getElementById('btnMode2');
+    const btnMode3 = document.getElementById('btnMode3');
+    const dotMode2 = document.getElementById('dotMode2');
+    const dotMode3 = document.getElementById('dotMode3');
+    const btnSample = document.getElementById('btnSample');
+    const btnDownloadZip = document.getElementById('btnDownloadZip');
+    const previewList = document.getElementById('previewList');
+
+    // Instagram portrait aspect ratio per post is 4:5 (0.8)
+    function getTargetRatio() {
+      return (state.slices * 4) / 5; // 1.6 for 2 slides, 2.4 for 3 slides
+    }
+
+    // --- Image Loader ---
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      state.fileName = file.name.replace(/\.[^/.]+$/, "") || "carousel";
+      const reader = new FileReader();
+      reader.onload = (evt) => loadSourceImage(evt.target.result);
+      reader.readAsDataURL(file);
+    });
+
+    function loadSourceImage(src) {
+      const img = new Image();
+      img.onload = () => {
+        state.image = img;
+        dropPrompt.classList.add('hidden');
+        btnDownloadZip.disabled = false;
+        btnDownloadZip.classList.remove('cursor-not-allowed', 'opacity-50');
+        fitCanvasToContainer();
+        initCropBox(1.0);
+        render();
+      };
+      img.src = src;
+    }
+
+    // --- Resize Canvas Fit ---
+    function fitCanvasToContainer() {
+      if (!state.image) return;
+      const parent = canvas.parentElement;
+      const maxW = parent.clientWidth - 32;
+      const maxH = parent.clientHeight - 32;
+
+      const scaleW = maxW / state.image.width;
+      const scaleH = maxH / state.image.height;
+      state.display.scale = Math.min(scaleW, scaleH);
+
+      state.display.w = Math.round(state.image.width * state.display.scale);
+      state.display.h = Math.round(state.image.height * state.display.scale);
+
+      canvas.width = state.display.w;
+      canvas.height = state.display.h;
+
+      state.display.x = 0;
+      state.display.y = 0;
+    }
+
+    // --- Initialize Crop Box ---
+    function initCropBox(scaleFactor = 1.0) {
+      if (!state.image) return;
+      const ratio = getTargetRatio();
+      const imgW = state.display.w;
+      const imgH = state.display.h;
+
+      let maxW, maxH;
+      if (imgW / imgH > ratio) {
+        maxH = imgH;
+        maxW = maxH * ratio;
+      } else {
+        maxW = imgW;
+        maxH = maxW / ratio;
+      }
+
+      const w = maxW * scaleFactor;
+      const h = maxH * scaleFactor;
+
+      state.cropBox = {
+        x: (imgW - w) / 2,
+        y: (imgH - h) / 2,
+        w: w,
+        h: h
+      };
+
+      scaleSlider.value = Math.round(scaleFactor * 100);
+      scaleDisplay.textContent = `${Math.round(scaleFactor * 100)}%`;
+    }
+
+    // --- Rendering Engine ---
+    function render() {
+      if (!state.image) return;
+
+      // 1. Base Image
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(state.image, 0, 0, state.display.w, state.display.h);
+
+      const { x, y, w, h } = state.cropBox;
+
+      // 2. Dark Overlay for trimmed areas
+      ctx.fillStyle = "rgba(2, 6, 23, 0.72)";
+      // Top
+      ctx.fillRect(0, 0, canvas.width, y);
+      // Bottom
+      ctx.fillRect(0, y + h, canvas.width, canvas.height - (y + h));
+      // Left
+      ctx.fillRect(0, y, x, h);
+      // Right
+      ctx.fillRect(x + w, y, canvas.width - (x + w), h);
+
+      // 3. Selection Frame
+      ctx.strokeStyle = "#38bdf8";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x, y, w, h);
+
+      // 4. Seam Guides (Marked by default)
+      if (state.showGuides) {
+        const step = w / state.slices;
+        ctx.strokeStyle = "#facc15"; // Yellow dashed seam line
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([6, 6]);
+
+        for (let i = 1; i < state.slices; i++) {
+          const seamX = x + (i * step);
+          ctx.beginPath();
+          ctx.moveTo(seamX, y);
+          ctx.lineTo(seamX, y + h);
+          ctx.stroke();
+        }
+        ctx.setLineDash([]);
+      }
+
+      // 5. Corner Handles for Direct Mouse Crop
+      drawHandles();
+
+      // 6. Update Previews
+      updatePreviews();
+    }
+
+    // --- Draw Corner Handles ---
+    function drawHandles() {
+      const { x, y, w, h } = state.cropBox;
+      const corners = [
+        { x: x, y: y },         // NW
+        { x: x + w, y: y },     // NE
+        { x: x, y: y + h },     // SW
+        { x: x + w, y: y + h }  // SE
+      ];
+
+      corners.forEach(pt => {
+        ctx.fillStyle = "#ffffff";
+        ctx.strokeStyle = "#0284c7";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.roundRect(pt.x - HANDLE_SIZE / 2, pt.y - HANDLE_SIZE / 2, HANDLE_SIZE, HANDLE_SIZE, 3);
+        ctx.fill();
+        ctx.stroke();
+      });
+    }
+
+    // --- Handle Detection ---
+    function getHandleUnderMouse(mx, my) {
+      const { x, y, w, h } = state.cropBox;
+      const hit = HANDLE_SIZE + 4;
+
+      if (Math.abs(mx - x) <= hit && Math.abs(my - y) <= hit) return 'nw';
+      if (Math.abs(mx - (x + w)) <= hit && Math.abs(my - y) <= hit) return 'ne';
+      if (Math.abs(mx - x) <= hit && Math.abs(my - (y + h)) <= hit) return 'sw';
+      if (Math.abs(mx - (x + w)) <= hit && Math.abs(my - (y + h)) <= hit) return 'se';
+
+      if (mx >= x && mx <= x + w && my >= y && my <= y + h) {
+        return 'move';
+      }
+
+      return null;
+    }
+
+    // --- Canvas Mouse & Touch Interactions ---
+    function getCanvasCoords(evt) {
+      const rect = canvas.getBoundingClientRect();
+      const clientX = evt.touches ? evt.touches[0].clientX : evt.clientX;
+      const clientY = evt.touches ? evt.touches[0].clientY : evt.clientY;
+      return {
+        x: clientX - rect.left,
+        y: clientY - rect.top
+      };
+    }
+
+    function onPointerDown(e) {
+      if (!state.image) return;
+      const pos = getCanvasCoords(e);
+      const action = getHandleUnderMouse(pos.x, pos.y);
+
+      if (action) {
+        state.interaction.mode = action;
+        state.interaction.startX = pos.x;
+        state.interaction.startY = pos.y;
+        state.interaction.boxOrigin = { ...state.cropBox };
+      }
+    }
+
+    function onPointerMove(e) {
+      if (!state.image) return;
+      const pos = getCanvasCoords(e);
+
+      // Cursor styling
+      if (!state.interaction.mode) {
+        const hover = getHandleUnderMouse(pos.x, pos.y);
+        if (hover === 'nw' || hover === 'se') canvas.style.cursor = 'nwse-resize';
+        else if (hover === 'ne' || hover === 'sw') canvas.style.cursor = 'nesw-resize';
+        else if (hover === 'move') canvas.style.cursor = 'move';
+        else canvas.style.cursor = 'default';
+        return;
+      }
+
+      const dx = pos.x - state.interaction.startX;
+      const dy = pos.y - state.interaction.startY;
+      const orig = state.interaction.boxOrigin;
+      const ratio = getTargetRatio();
+
+      if (state.interaction.mode === 'move') {
+        let nx = orig.x + dx;
+        let ny = orig.y + dy;
+
+        // Keep inside bounds
+        nx = Math.max(0, Math.min(nx, canvas.width - orig.w));
+        ny = Math.max(0, Math.min(ny, canvas.height - orig.h));
+
+        state.cropBox.x = nx;
+        state.cropBox.y = ny;
+      } else {
+        // Corner resizing while locking aspect ratio
+        let nw = orig.w;
+        let nh = orig.h;
+        let nx = orig.x;
+        let ny = orig.y;
+
+        if (state.interaction.mode === 'se') {
+          nw = Math.max(60, orig.w + dx);
+          nh = nw / ratio;
+          if (nx + nw > canvas.width) { nw = canvas.width - nx; nh = nw / ratio; }
+          if (ny + nh > canvas.height) { nh = canvas.height - ny; nw = nh * ratio; }
+        } else if (state.interaction.mode === 'sw') {
+          nw = Math.max(60, orig.w - dx);
+          nh = nw / ratio;
+          nx = (orig.x + orig.w) - nw;
+          if (nx < 0) { nx = 0; nw = orig.x + orig.w; nh = nw / ratio; }
+          if (ny + nh > canvas.height) { nh = canvas.height - ny; nw = nh * ratio; nx = (orig.x + orig.w) - nw; }
+        } else if (state.interaction.mode === 'ne') {
+          nw = Math.max(60, orig.w + dx);
+          nh = nw / ratio;
+          ny = (orig.y + orig.h) - nh;
+          if (nx + nw > canvas.width) { nw = canvas.width - nx; nh = nw / ratio; ny = (orig.y + orig.h) - nh; }
+          if (ny < 0) { ny = 0; nh = orig.y + orig.h; nw = nh * ratio; }
+        } else if (state.interaction.mode === 'nw') {
+          nw = Math.max(60, orig.w - dx);
+          nh = nw / ratio;
+          nx = (orig.x + orig.w) - nw;
+          ny = (orig.y + orig.h) - nh;
+          if (nx < 0) { nx = 0; nw = orig.x + orig.w; nh = nw / ratio; ny = (orig.y + orig.h) - nh; }
+          if (ny < 0) { ny = 0; nh = orig.y + orig.h; nw = nh * ratio; nx = (orig.x + orig.w) - nw; }
+        }
+
+        state.cropBox = { x: nx, y: ny, w: nw, h: nh };
+
+        // Sync slider
+        const maxPossibleW = (canvas.width / canvas.height > ratio) ? canvas.height * ratio : canvas.width;
+        const currentPct = Math.round((nw / maxPossibleW) * 100);
+        scaleSlider.value = Math.min(100, Math.max(20, currentPct));
+        scaleDisplay.textContent = `${scaleSlider.value}%`;
+      }
+
+      render();
+    }
+
+    function onPointerUp() {
+      state.interaction.mode = null;
+    }
+
+    canvas.addEventListener('mousedown', onPointerDown);
+    window.addEventListener('mousemove', onPointerMove);
+    window.addEventListener('mouseup', onPointerUp);
+
+    canvas.addEventListener('touchstart', onPointerDown, { passive: true });
+    window.addEventListener('touchmove', onPointerMove, { passive: true });
+    window.addEventListener('touchend', onPointerUp);
+
+    // --- Slider & Controls Events ---
+    scaleSlider.addEventListener('input', (e) => {
+      const factor = parseInt(e.target.value, 10) / 100;
+      scaleDisplay.textContent = `${e.target.value}%`;
+
+      const ratio = getTargetRatio();
+      let maxW, maxH;
+      if (canvas.width / canvas.height > ratio) {
+        maxH = canvas.height;
+        maxW = maxH * ratio;
+      } else {
+        maxW = canvas.width;
+        maxH = maxW / ratio;
+      }
+
+      const newW = maxW * factor;
+      const newH = maxH * factor;
+
+      // Keep centered during slider change
+      const cx = state.cropBox.x + state.cropBox.w / 2;
+      const cy = state.cropBox.y + state.cropBox.h / 2;
+
+      let nx = cx - newW / 2;
+      let ny = cy - newH / 2;
+
+      nx = Math.max(0, Math.min(nx, canvas.width - newW));
+      ny = Math.max(0, Math.min(ny, canvas.height - newH));
+
+      state.cropBox = { x: nx, y: ny, w: newW, h: newH };
+      render();
+    });
+
+    chkGuides.addEventListener('change', (e) => {
+      state.showGuides = e.target.checked;
+      render();
+    });
+
+    function setMode(numSlices) {
+      if (state.slices === numSlices) return;
+      state.slices = numSlices;
+
+      if (numSlices === 2) {
+        btnMode2.className = "py-2.5 px-3 rounded-lg border border-indigo-500 bg-indigo-500/10 text-indigo-300 text-xs font-medium transition flex items-center justify-center gap-2";
+        btnMode3.className = "py-2.5 px-3 rounded-lg border border-slate-700 bg-slate-800 text-xs font-medium hover:border-slate-600 transition flex items-center justify-center gap-2";
+        dotMode2.className = "w-2 h-2 rounded-full bg-indigo-400";
+        dotMode3.className = "w-2 h-2 rounded-full bg-slate-500";
+      } else {
+        btnMode3.className = "py-2.5 px-3 rounded-lg border border-indigo-500 bg-indigo-500/10 text-indigo-300 text-xs font-medium transition flex items-center justify-center gap-2";
+        btnMode2.className = "py-2.5 px-3 rounded-lg border border-slate-700 bg-slate-800 text-xs font-medium hover:border-slate-600 transition flex items-center justify-center gap-2";
+        dotMode3.className = "w-2 h-2 rounded-full bg-indigo-400";
+        dotMode2.className = "w-2 h-2 rounded-full bg-slate-500";
+      }
+
+      initCropBox(parseInt(scaleSlider.value, 10) / 100);
+      render();
+    }
+
+    btnMode2.addEventListener('click', () => setMode(2));
+    btnMode3.addEventListener('click', () => setMode(3));
+
+    window.addEventListener('resize', () => {
+      if (state.image) {
+        fitCanvasToContainer();
+        initCropBox(parseInt(scaleSlider.value, 10) / 100);
+        render();
+      }
+    });
+
+    // --- Live Preview Generator ---
+    function updatePreviews() {
+      if (!state.image) return;
+      previewList.innerHTML = '';
+
+      const origX = state.cropBox.x / state.display.scale;
+      const origY = state.cropBox.y / state.display.scale;
+      const origW = state.cropBox.w / state.display.scale;
+      const origH = state.cropBox.h / state.display.scale;
+      const sliceOrigW = origW / state.slices;
+
+      for (let i = 0; i < state.slices; i++) {
+        const card = document.createElement('div');
+        card.className = "bg-slate-800/80 rounded-xl p-3 border border-slate-700/80 space-y-2.5";
+
+        const header = document.createElement('div');
+        header.className = "flex items-center justify-between text-xs";
+        header.innerHTML = `
+          <span class="font-semibold text-slate-200">Panel ${i + 1} of ${state.slices}</span>
+          <span class="text-[10px] bg-slate-700 text-slate-300 px-2 py-0.5 rounded">1080×1350</span>
+        `;
+
+        const thumb = document.createElement('canvas');
+        thumb.width = 180;
+        thumb.height = 225; // 4:5 ratio preview
+        thumb.className = "w-full rounded-lg border border-slate-700/60 object-cover";
+        const tCtx = thumb.getContext('2d');
+        tCtx.imageSmoothingQuality = 'high';
+
+        // Draw cropped section
+        tCtx.drawImage(
+          state.image,
+          origX + (i * sliceOrigW), origY, sliceOrigW, origH,
+          0, 0, thumb.width, thumb.height
+        );
+
+        const btnDown = document.createElement('button');
+        btnDown.className = "w-full py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded text-xs font-medium transition flex items-center justify-center gap-1.5";
+        btnDown.innerHTML = `
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+          </svg>
+          Download Slide ${i + 1}
+        `;
+
+        btnDown.onclick = () => downloadSlice(i);
+
+        card.appendChild(header);
+        card.appendChild(thumb);
+        card.appendChild(btnDown);
+        previewList.appendChild(card);
+      }
+    }
+
+    // --- High-Resolution Exporters (1080x1350) ---
+    async function createSliceBlob(index) {
+      const origX = state.cropBox.x / state.display.scale;
+      const origY = state.cropBox.y / state.display.scale;
+      const origW = state.cropBox.w / state.display.scale;
+      const origH = state.cropBox.h / state.display.scale;
+      const sliceOrigW = origW / state.slices;
+
+      const offscreen = document.createElement('canvas');
+      offscreen.width = 1080;
+      offscreen.height = 1350;
+      const offCtx = offscreen.getContext('2d');
+      offCtx.imageSmoothingEnabled = true;
+      offCtx.imageSmoothingQuality = 'high';
+
+      offCtx.drawImage(
+        state.image,
+        origX + (index * sliceOrigW), origY, sliceOrigW, origH,
+        0, 0, 1080, 1350
+      );
+
+      return new Promise(resolve => offscreen.toBlob(resolve, 'image/jpeg', 0.95));
+    }
+
+    async function downloadSlice(index) {
+      const blob = await createSliceBlob(index);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${state.fileName}_slide_${index + 1}_of_${state.slices}.jpg`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    btnDownloadZip.addEventListener('click', async () => {
+      if (!state.image) return;
+
+      btnDownloadZip.disabled = true;
+      const originalText = btnDownloadZip.innerHTML;
+      btnDownloadZip.innerHTML = `
+        <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+        </svg>
+        Packing ZIP...
+      `;
+
+      try {
+        const zip = new JSZip();
+        for (let i = 0; i < state.slices; i++) {
+          const blob = await createSliceBlob(i);
+          zip.file(`${state.fileName}_slide_${i + 1}_of_${state.slices}.jpg`, blob);
+        }
+
+        const zipBlob = await zip.generateAsync({ type: 'blob' });
+        const url = URL.createObjectURL(zipBlob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${state.fileName}_instagram_carousel.zip`;
+        a.click();
+        URL.revokeObjectURL(url);
+      } catch (err) {
+        alert("Error exporting zip: " + err.message);
+      } finally {
+        btnDownloadZip.disabled = false;
+        btnDownloadZip.innerHTML = originalText;
+      }
+    });
+
+    // --- Built-in Sample Generator ---
+    btnSample.addEventListener('click', () => {
+      const sample = document.createElement('canvas');
+      sample.width = 3840;
+      sample.height = 1600;
+      const sCtx = sample.getContext('2d');
+
+      // Gradient sunset landscape
+      const grad = sCtx.createLinearGradient(0, 0, 0, sample.height);
+      grad.addColorStop(0, '#0f172a');
+      grad.addColorStop(0.4, '#4c1d95');
+      grad.addColorStop(0.7, '#db2777');
+      grad.addColorStop(1, '#ea580c');
+      sCtx.fillStyle = grad;
+      sCtx.fillRect(0, 0, sample.width, sample.height);
+
+      // Glowing Sun
+      sCtx.fillStyle = '#fef08a';
+      sCtx.shadowColor = '#facc15';
+      sCtx.shadowBlur = 90;
+      sCtx.beginPath();
+      sCtx.arc(sample.width * 0.5, sample.height * 0.65, 300, 0, Math.PI * 2);
+      sCtx.fill();
+      sCtx.shadowBlur = 0;
+
+      // Mountain silhouettes
+      sCtx.fillStyle = '#090d16';
+      sCtx.beginPath();
+      sCtx.moveTo(0, sample.height);
+      for (let i = 0; i <= sample.width; i += 120) {
+        const h = Math.sin(i * 0.003) * 260 + Math.cos(i * 0.008) * 140 + 400;
+        sCtx.lineTo(i, sample.height - h);
+      }
+      sCtx.lineTo(sample.width, sample.height);
+      sCtx.closePath();
+      sCtx.fill();
+
+      state.fileName = "sample_panorama";
+      loadSourceImage(sample.toDataURL('image/jpeg', 0.92));
+    });
+  </script>
+</body>
+</html>
